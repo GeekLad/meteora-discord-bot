@@ -91,7 +91,7 @@ function createOpportunityEmbedding(
   return {
     title: `Top ${messages.length - 1} ${
       !strict ? "Non-" : ""
-    } Strict List DLMM Opportunities`,
+    }Strict List DLMM Opportunities`,
     description,
     color: 3329330,
   };
