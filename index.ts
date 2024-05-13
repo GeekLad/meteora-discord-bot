@@ -2,12 +2,12 @@ import {
   ChannelType,
   Client,
   IntentsBitField,
-  MessageFlags,
   type APIEmbed,
 } from "discord.js";
 import { getOpportunities, type OpportunityData } from "./opportunity-finder";
 import type { DexScreenerToken } from "./dex-screener";
 import { RUG_CHECK_EXCEPTIONS } from "./config";
+import { getJupiterTokenList } from "./jupiter-token-list";
 
 // Verify the required environment variables
 const environmentErrors: string[] = [];
@@ -65,13 +65,18 @@ function singleOpportunityMessage(opty: OpportunityData): string {
 }
 
 function createOpportunityEmbedding(
-  opportunities: OpportunityData[]
+  opportunities: OpportunityData[],
+  strict = false
 ): APIEmbed {
   const messages = opportunities
     // Filter trending
-    .filter((opty) => (opty.trend = "Up"))
+    .filter(
+      (opty) =>
+        opty.trend == "Up" &&
+        ((!strict && !opty.strict) || (strict && opty.strict))
+    )
     // Trim down to limit the message size
-    .slice(0, 15)
+    .slice(0, 10)
     // Generate the messages
     .map((opty) => singleOpportunityMessage(opty));
 
@@ -84,7 +89,9 @@ function createOpportunityEmbedding(
 
   // Build the API embedding
   return {
-    title: `Top ${messages.length - 1} DLMM Opportunities`,
+    title: `Top ${messages.length - 1} ${
+      !strict ? "Non-" : ""
+    } Strict List DLMM Opportunities`,
     description,
     color: 3329330,
   };
@@ -94,8 +101,14 @@ async function sendChannelOpportunities(
   client: Client,
   channelNames: string[]
 ) {
-  const opportunities = await getOpportunities();
-  const embeds = [createOpportunityEmbedding(opportunities)];
+  const tokenMap = await getJupiterTokenList();
+  const opportunities = await getOpportunities(tokenMap);
+  const nonStrictOpportunities = createOpportunityEmbedding(
+    opportunities,
+    false
+  );
+  const strictOpportunities = createOpportunityEmbedding(opportunities, true);
+  const embeds = [nonStrictOpportunities, strictOpportunities];
 
   client.channels.cache.forEach(async (channel) => {
     if (

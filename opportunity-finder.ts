@@ -6,6 +6,7 @@ import {
   type DexScreenerPair,
   type DexScreenerToken,
 } from "./dex-screener";
+import type { JupiterTokenListToken } from "./jupiter-token-list";
 
 export interface DexScreenerPairEnriched extends DexScreenerPair {
   liquidity: DexScreenerLiquidityEnriched;
@@ -15,6 +16,7 @@ export interface DexScreenerPairEnriched extends DexScreenerPair {
   fees24h: DexScreenerActivityInfoEnriched;
   feeToTvl: DexScreenerActivityInfoEnriched;
   trend: "Up" | "Down";
+  strict: boolean;
 }
 
 export interface DexScreenerLiquidityEnriched extends DexScreenerLiquidity {
@@ -39,9 +41,11 @@ export interface OpportunityData {
   trend: "Up" | "Down";
   fees24h: DexScreenerActivityInfoEnriched;
   feeToTvl: DexScreenerActivityInfoEnriched;
+  strict: boolean;
 }
 
 function addMeteoraData(
+  tokenMap: Map<string, JupiterTokenListToken>,
   dexScreenerData: DexScreenerPair[],
   meteoraData: MeteoraDlmmPair[]
 ): DexScreenerPairEnriched[] {
@@ -62,6 +66,21 @@ function addMeteoraData(
       // Make sure we have liquidity
       Number(meteoraPair.liquidity) > 0
     ) {
+      // Add the strict flag
+      const strictTokenBase = tokenMap.get(dexScreenerPair.baseToken.address);
+      if (strictTokenBase) {
+        const strictTokenQuote = tokenMap.get(
+          dexScreenerPair.quoteToken.address
+        );
+        if (strictTokenQuote) {
+          dexScreenerPair.strict = true;
+        } else {
+          dexScreenerPair.strict = false;
+        }
+      } else {
+        dexScreenerPair.strict = false;
+      }
+
       // Get the liquidity
       if (!dexScreenerPair.liquidity) {
         dexScreenerPair.liquidity = {
@@ -131,7 +150,9 @@ function addMeteoraData(
   return enrichedData;
 }
 
-export async function getOpportunities(): Promise<OpportunityData[]> {
+export async function getOpportunities(
+  tokenMap: Map<string, JupiterTokenListToken>
+): Promise<OpportunityData[]> {
   // Fetch the Meteora data
   const meteoraPairs = await getMeteoraPairs();
 
@@ -143,6 +164,7 @@ export async function getOpportunities(): Promise<OpportunityData[]> {
 
   // Enrich the DEX Screener data with Meteora data
   const enrichedDexScreenerPairs = addMeteoraData(
+    tokenMap,
     dexScreenerPairs,
     meteoraPairs
   )
@@ -169,6 +191,7 @@ export async function getOpportunities(): Promise<OpportunityData[]> {
       trend: pair.trend,
       fees24h: pair.fees24h,
       feeToTvl: pair.feeToTvl,
+      strict: pair.strict,
     };
   });
 }
