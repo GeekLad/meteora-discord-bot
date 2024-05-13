@@ -3,33 +3,83 @@ import {
   Client,
   IntentsBitField,
   MessageFlags,
-  TextChannel,
+  type APIEmbed,
 } from "discord.js";
 import { getOpportunities, type OpportunityData } from "./opportunity-finder";
+import type { DexScreenerToken } from "./dex-screener";
+import { RUG_CHECK_EXCEPTIONS } from "./config";
 
-function opportunityMessage(opty: OpportunityData): string {
-  const pairAddress = opty.pairAddress;
-  const pairName = opty.pairName;
-  const liquidity = opty.liquidity;
-  const fdv = opty.fdv;
-  const binStep = opty.binStep;
-  const baseFee = opty.baseFee;
-  const vol = opty.volume24h.min;
-  const fees = opty.fees24h.min;
-  const feestoTvl = opty.feeToTvl.min;
-
-  return `**[${pairName}](https://app.meteora.ag/dlmm/${pairAddress})** :broom: ${feestoTvl} :dollar: ${fees} :pushpin: ${fdv} :bar_chart: ${liquidity} :triangular_ruler: ${vol} :red_square: ${binStep} :bookmark: ${baseFee}`;
+function rugCheck(token: DexScreenerToken): string {
+  if (!RUG_CHECK_EXCEPTIONS.includes(token.symbol)) {
+    return `[${token.symbol}](https://rugcheck.xyz/tokens/${token.address})`;
+  }
+  return "";
 }
 
-async function sendChannelOpportunities(channelNames: string[]) {
-  const opportunities = await getOpportunities();
-  const top5Trending = opportunities
+function singleOpportunityMessage(opty: OpportunityData): string {
+  const pairAddress = opty.pairAddress;
+  const pairName = opty.pairName;
+  const feestoTvl = opty.feeToTvl.min.toLocaleString("en-US", {
+    style: "percent",
+    maximumFractionDigits: 2,
+  });
+
+  const liquidity = opty.liquidity.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+  const binStep = opty.binStep;
+  const baseFee = opty.baseFee.toLocaleString("en-US", {
+    style: "percent",
+    maximumFractionDigits: 2,
+  });
+  const message = `**[${pairName}](https://app.meteora.ag/dlmm/${pairAddress})** :broom: ${feestoTvl} :dollar: ${liquidity} :red_square: ${binStep} :bookmark: ${baseFee}`;
+  const rugChecks = [rugCheck(opty.base), rugCheck(opty.quote)];
+  if (rugChecks[0] != "" && rugChecks[1] != "") {
+    return message + " :white_check_mark: " + rugChecks.join(", ");
+  }
+  if (rugChecks[0] != "") {
+    return message + " :white_check_mark: " + rugChecks[0];
+  }
+  if (rugChecks[1] != "") {
+    return message + " :white_check_mark: " + rugChecks[1];
+  }
+  return message;
+}
+
+function createOpportunityEmbedding(
+  opportunities: OpportunityData[]
+): APIEmbed {
+  const messages = opportunities
+    // Filter trending
     .filter((opty) => (opty.trend = "Up"))
-    .slice(0, 5)
-    .map((opty) => opportunityMessage(opty));
-  top5Trending.unshift(
-    "**Pair Name** :broom: Estimated 24H Fees / TVL :dollar: Estimated 24H Fees :pushpin: FDV :bar_chart: TVL :triangular_ruler: Estimated 24H Volume :red_square: Bin Step :bookmark: Base Fee"
+    // Trim down to limit the message size
+    .slice(0, 15)
+    // Generate the messages
+    .map((opty) => singleOpportunityMessage(opty));
+
+  messages.unshift(
+    "**Pair Name**\n:broom: Estimated 24H Fees / TVL\n:dollar: Market TVL\n:red_square: Bin Step\n:bookmark: Base Fee\n:white_check_mark: Rug Check"
   );
+
+  // Combine the message array into a string
+  const description = messages.join("\n\n");
+
+  // Build the API embedding
+  return {
+    title: `Top ${messages.length - 1} DLMM Opportunities`,
+    description,
+    color: 3329330,
+  };
+}
+
+async function sendChannelOpportunities(
+  client: Client,
+  channelNames: string[]
+) {
+  const opportunities = await getOpportunities();
+  const embeds = [createOpportunityEmbedding(opportunities)];
 
   client.channels.cache.forEach(async (channel) => {
     if (
@@ -38,8 +88,7 @@ async function sendChannelOpportunities(channelNames: string[]) {
     ) {
       try {
         channel.send({
-          content: top5Trending.join("\n"),
-          flags: MessageFlags.SuppressEmbeds,
+          embeds,
         });
       } catch (err) {
         console.error(err);
@@ -57,10 +106,13 @@ const client = new Client({
 client.once("ready", async () => {
   console.log("Bot is online!");
   // Send opportunities when first connecting
-  sendChannelOpportunities(["testing"]);
+  sendChannelOpportunities(client, ["testing"]);
 
-  // Send opportunities every 15 minutes
-  setInterval(() => sendChannelOpportunities(["testing"]), 1000 * 60 * 15);
+  // Send opportunities every hour
+  setInterval(
+    () => sendChannelOpportunities(client, ["testing"]),
+    1000 * 60 * 60
+  );
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
