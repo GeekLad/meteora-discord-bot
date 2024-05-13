@@ -9,6 +9,22 @@ import { getOpportunities, type OpportunityData } from "./opportunity-finder";
 import type { DexScreenerToken } from "./dex-screener";
 import { RUG_CHECK_EXCEPTIONS } from "./config";
 
+// Verify the required environment variables
+const environmentErrors: string[] = [];
+
+if (!process.env.DISCORD_BOT_TOKEN) {
+  environmentErrors.push("DISCORD_BOT_TOKEN environment variable missing.");
+}
+if (!process.env.OPPORTUNITY_CHANNELS) {
+  environmentErrors.push("OPPORTUNITY_CHANNELS environment variable missing.");
+}
+if (environmentErrors.length > 0) {
+  throw new Error(
+    "Unable to start bot, environment not configured properly.\n" +
+      environmentErrors.join("\n")
+  );
+}
+
 function rugCheck(token: DexScreenerToken): string {
   if (!RUG_CHECK_EXCEPTIONS.includes(token.symbol)) {
     return `[${token.symbol}](https://rugcheck.xyz/tokens/${token.address})`;
@@ -97,6 +113,9 @@ async function sendChannelOpportunities(
   });
 }
 
+// Get the broadcast channels
+const OPPORTUNITY_CHANNELS = process.env.OPPORTUNITY_CHANNELS!.split(/\s*,\s*/);
+
 // Instantiate the Discord client
 const client = new Client({
   intents: [IntentsBitField.Flags.Guilds, IntentsBitField.Flags.GuildMessages],
@@ -106,11 +125,11 @@ const client = new Client({
 client.once("ready", async () => {
   console.log("Bot is online!");
   // Send opportunities when first connecting
-  sendChannelOpportunities(client, ["testing"]);
+  sendChannelOpportunities(client, OPPORTUNITY_CHANNELS);
 
   // Send opportunities every hour
   setInterval(
-    () => sendChannelOpportunities(client, ["testing"]),
+    () => sendChannelOpportunities(client, OPPORTUNITY_CHANNELS),
     1000 * 60 * 60
   );
 });
