@@ -105,11 +105,15 @@ export async function getDexScreenerPairs(
   const responses = await Promise.all(fetchUrls.map((url) => fetch(url)));
   responses.forEach(async (response, i) => {
     const responseText = await response.text();
-    const data: DexScreenerApiData = JSON.parse(responseText);
-    if (data.pairs) {
-      data.pairs.forEach((pair) => dexScreenerData.push(pair));
-    } else {
-      console.warn(`Error fetching: ${fetchUrls[i]}`);
+    try {
+      const data: DexScreenerApiData = JSON.parse(responseText);
+      if (data.pairs) {
+        data.pairs.forEach((pair) => dexScreenerData.push(pair));
+      } else {
+        console.warn(`Warning, error fetching: ${fetchUrls[i]}`);
+      }
+    } catch (err) {
+      console.warn(`Warning, error fetching: ${fetchUrls[i]}`);
     }
   });
   return dexScreenerData;
