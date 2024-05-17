@@ -1,4 +1,5 @@
 import {
+  ApplicationCommandOptionType,
   ChatInputCommandInteraction,
   Client,
   IntentsBitField,
@@ -116,6 +117,14 @@ function isBlueChip(opty: OpportunityData): boolean {
   );
 }
 
+function addHeading(messages: string[], blueChip: boolean) {
+  messages.unshift(
+    `**Pair Name**\n:printer: Estimated Minimum 24H Fees / TVL\n:money_bag: Market TVL\n:ladder: Bin Step\n:dollar: Base Fee${
+      !blueChip ? "\n:white_check_mark: Rug Check" : ""
+    }`
+  );
+}
+
 function createOpportunityEmbedding(
   strict = false,
   blueChip = false
@@ -138,14 +147,8 @@ function createOpportunityEmbedding(
     // Generate the messages
     .map((opty) => singleOpportunityMessage(opty));
 
-  // Add the header
-  messages.unshift(
-    `**Pair Name**\n:printer: Estimated Minimum 24H Fees / TVL\n:money_bag: Market TVL\n:ladder: Bin Step\n:dollar: Base Fee${
-      !blueChip ? "\n:white_check_mark: Rug Check" : ""
-    }`
-  );
-
-  // Combine the message array into a string
+  // Add the heading and combine the message array into a string
+  addHeading(messages, blueChip);
   const description = messages.join("\n\n");
 
   // Build the API embedding
@@ -174,6 +177,74 @@ async function sendOppoprtunities(
   });
 }
 
+function invalidPir(pairName: string): APIEmbed {
+  return {
+    title: "Invalid pair",
+    description: `${pairName} isn't a valid pair.  Pair name should be formatted as \`TOKEN1-TOKEN2\``,
+    color: 3329330,
+  };
+}
+
+function createPairEmbedding(pairName: string): APIEmbed {
+  const symbols = pairName
+    .toLowerCase()
+    .trim()
+    .split(/[-/\s]/);
+  if (symbols.length != 2) {
+    return invalidPir(pairName);
+  }
+  const pairs = OPPORTUNITY_DATA.data.filter(
+    (opty) =>
+      opty.trend == "Up" &&
+      symbols.includes(opty.base.symbol.toLowerCase()) &&
+      symbols.includes(opty.quote.symbol.toLowerCase())
+  );
+
+  if (pairs.length == 0) {
+    return {
+      title: "No Pairs Found",
+      description: `There weren't any pairs for ${pairName} found`,
+      color: 3329330,
+    };
+  }
+
+  const messages = pairs
+    // Trim down to limit the message size
+    .slice(0, 10)
+    // Generate the messages
+    .map((opty) => singleOpportunityMessage(opty));
+
+  // Add the heading and combine the message array into a string
+  const blueChip = isBlueChip(pairs[0]);
+  addHeading(messages, blueChip);
+  const description = messages.join("\n\n");
+
+  // Build the API embedding
+  return {
+    title: `DLMM Opportunities for ${
+      pairs[0].pairName
+    }\nLast updated <t:${Math.round(OPPORTUNITY_DATA.updated)}:R>`,
+    description,
+    color: 3329330,
+  };
+}
+
+function sendPairOpportunities(
+  interaction:
+    | ChatInputCommandInteraction<CacheType>
+    | MessageContextMenuCommandInteraction<CacheType>
+    | UserContextMenuCommandInteraction<CacheType>
+) {
+  const pairName = interaction.options.get("pairname");
+  if (!pairName) {
+    return interaction.reply("pairname parameter required");
+  }
+  const embeds = [createPairEmbedding(pairName.value as string)];
+  interaction.reply({
+    embeds,
+  });
+}
+
 function registerCommands() {
   const app = CLIENT.application!;
 
@@ -190,6 +261,19 @@ function registerCommands() {
     name: "bluechip",
     description: "Get a list of blue chip opportunities",
   });
+  app.commands.create({
+    name: "pair",
+    description: "Get a list of the opportunities for a specific pair",
+    options: [
+      {
+        name: "pairname",
+        description:
+          "The name of the pair for which you want opportunities.  Use the format TOKEN1-TOKEN2",
+        type: ApplicationCommandOptionType.String,
+        required: true,
+      },
+    ],
+  });
 
   // Set up the handlers
   CLIENT.on("interactionCreate", async (interaction: Interaction) => {
@@ -204,6 +288,8 @@ function registerCommands() {
       case "bluechip":
         sendOppoprtunities(interaction, true, true);
         break;
+      case "pair":
+        sendPairOpportunities(interaction);
     }
   });
 }
