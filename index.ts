@@ -134,13 +134,15 @@ function createOpportunityEmbedding(
           (strict && blueChip && isBlueChip(opty)))
     )
     // Trim down to limit the message size
-    .slice(0, 10)
+    .slice(0, 20)
     // Generate the messages
     .map((opty) => singleOpportunityMessage(opty));
 
   // Add the header
   messages.unshift(
-    "**Pair Name**\n:printer: Estimated Minimum 24H Fees / TVL\n:money_bag: Market TVL\n:ladder: Bin Step\n:dollar: Base Fee\n:white_check_mark: Rug Check"
+    `**Pair Name**\n:printer: Estimated Minimum 24H Fees / TVL\n:money_bag: Market TVL\n:ladder: Bin Step\n:dollar: Base Fee${
+      !blueChip ? "\n:white_check_mark: Rug Check" : ""
+    }`
   );
 
   // Combine the message array into a string
