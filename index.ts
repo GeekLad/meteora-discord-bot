@@ -246,33 +246,33 @@ function sendPairOpportunities(
 }
 
 function registerCommands() {
-  const app = CLIENT.application!;
-
   // Set up the commands
-  app.commands.create({
-    name: "degen",
-    description: "Get a list of top non-strict opportunities",
-  });
-  app.commands.create({
-    name: "strict",
-    description: "Get a list of strict opportunities",
-  });
-  app.commands.create({
-    name: "bluechip",
-    description: "Get a list of blue chip opportunities",
-  });
-  app.commands.create({
-    name: "pair",
-    description: "Get a list of the opportunities for a specific pair",
-    options: [
-      {
-        name: "pairname",
-        description:
-          "The name of the pair for which you want opportunities.  Use the format TOKEN1-TOKEN2",
-        type: ApplicationCommandOptionType.String,
-        required: true,
-      },
-    ],
+  CLIENT.guilds.cache.forEach(async (guild) => {
+    guild.commands.create({
+      name: "degen",
+      description: "Get a list of top non-strict opportunities",
+    });
+    guild.commands.create({
+      name: "strict",
+      description: "Get a list of strict opportunities",
+    });
+    guild.commands.create({
+      name: "bluechip",
+      description: "Get a list of blue chip opportunities",
+    });
+    guild.commands.create({
+      name: "pair",
+      description: "Get a list of the opportunities for a specific pair",
+      options: [
+        {
+          name: "pairname",
+          description:
+            "The name of the pair for which you want opportunities.  Use the format TOKEN1-TOKEN2",
+          type: ApplicationCommandOptionType.String,
+          required: true,
+        },
+      ],
+    });
   });
 
   // Set up the handlers
