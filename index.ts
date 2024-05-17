@@ -134,7 +134,7 @@ function createOpportunityEmbedding(
           (strict && blueChip && isBlueChip(opty)))
     )
     // Trim down to limit the message size
-    .slice(0, 15)
+    .slice(0, 10)
     // Generate the messages
     .map((opty) => singleOpportunityMessage(opty));
 
@@ -177,20 +177,18 @@ async function sendOppoprtunities(
 function registerCommands() {
   const app = CLIENT.application!;
 
-  // Set up the commands for everyone connected
-  CLIENT.guilds.cache.forEach(async (guild) => {
-    guild.commands.create({
-      name: "degen",
-      description: "Get a list of top non-strict opportunities",
-    });
-    guild.commands.create({
-      name: "strict",
-      description: "Get a list of strict opportunities",
-    });
-    guild.commands.create({
-      name: "bluechip",
-      description: "Get a list of blue chip opportunities",
-    });
+  // Set up the commands
+  app.commands.create({
+    name: "degen",
+    description: "Get a list of top non-strict opportunities",
+  });
+  app.commands.create({
+    name: "strict",
+    description: "Get a list of strict opportunities",
+  });
+  app.commands.create({
+    name: "bluechip",
+    description: "Get a list of blue chip opportunities",
   });
 
   // Set up the handlers
