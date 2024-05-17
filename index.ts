@@ -10,7 +10,7 @@ import {
 } from "discord.js";
 import { getOpportunities, type OpportunityData } from "./opportunity-finder";
 import type { DexScreenerToken } from "./dex-screener";
-import { RUG_CHECK_EXCEPTIONS } from "./config";
+import { BLUE_CHIPS, REFRESHING_MESSAGE } from "./config";
 import { getJupiterTokenList } from "./jupiter-token-list";
 
 interface DiscordOpportunityData {
@@ -44,20 +44,25 @@ let OPPORTUNITY_DATA: DiscordOpportunityData = {
   updated: 0,
   data: [],
 };
-setInterval(refreshOpportunities, REFRESH_MS);
 
 async function refreshOpportunities() {
   const tokenMap = await getJupiterTokenList();
-  const data = await getOpportunities(tokenMap);
-  OPPORTUNITY_DATA = {
-    updated: new Date().getTime() / 1000,
-    data,
-  };
-  return OPPORTUNITY_DATA;
+  try {
+    const data = await getOpportunities(tokenMap);
+    OPPORTUNITY_DATA = {
+      updated: new Date().getTime() / 1000,
+      data,
+    };
+    return OPPORTUNITY_DATA;
+  } catch (err) {
+    console.error(err);
+    console.error("Retrying refresh in 30 seconds...");
+    setInterval(refreshOpportunities, 30 * 1000);
+  }
 }
 
 function rugCheck(token: DexScreenerToken): string {
-  if (!RUG_CHECK_EXCEPTIONS.includes(token.symbol)) {
+  if (!BLUE_CHIPS.includes(token.symbol.toLowerCase())) {
     return `[${token.symbol}](https://rugcheck.xyz/tokens/${token.address})`;
   }
   return "";
@@ -81,7 +86,7 @@ function singleOpportunityMessage(opty: OpportunityData): string {
     style: "percent",
     maximumFractionDigits: 2,
   });
-  const message = `**[${pairName}](https://app.meteora.ag/dlmm/${pairAddress})** :broom: ${feestoTvl} :dollar: ${liquidity} :red_square: ${binStep} :bookmark: ${baseFee}`;
+  const message = `**[${pairName}](https://app.meteora.ag/dlmm/${pairAddress})** :printer: ${feestoTvl} :money_bag: ${liquidity} :ladder: ${binStep} :dollar: ${baseFee}`;
   const rugChecks = [rugCheck(opty.base), rugCheck(opty.quote)];
   if (rugChecks[0] != "" && rugChecks[1] != "") {
     return message + " :white_check_mark: " + rugChecks.join(", ");
@@ -95,14 +100,28 @@ function singleOpportunityMessage(opty: OpportunityData): string {
   return message;
 }
 
-function createOpportunityEmbedding(strict = false): APIEmbed {
+function isDegen(opty: OpportunityData): boolean {
+  return !opty.strict;
+}
+
+function isStrict(opty: OpportunityData): boolean {
+  return opty.strict;
+}
+
+function isBlueChip(opty: OpportunityData): boolean {
+  return (
+    opty.strict &&
+    BLUE_CHIPS.includes(opty.base.symbol.toLowerCase()) &&
+    BLUE_CHIPS.includes(opty.quote.symbol.toLowerCase())
+  );
+}
+
+function createOpportunityEmbedding(
+  strict = false,
+  blueChip = false
+): APIEmbed {
   if (OPPORTUNITY_DATA.data.length == 0) {
-    return {
-      title: "Updating",
-      description:
-        "Please try again in a minute, data is currently refreshing.",
-      color: 3329330,
-    };
+    return REFRESHING_MESSAGE;
   }
 
   const messages = OPPORTUNITY_DATA.data
@@ -110,15 +129,18 @@ function createOpportunityEmbedding(strict = false): APIEmbed {
     .filter(
       (opty) =>
         opty.trend == "Up" &&
-        ((!strict && !opty.strict) || (strict && opty.strict))
+        ((!strict && isDegen(opty)) ||
+          (strict && !blueChip && isStrict(opty)) ||
+          (strict && blueChip && isBlueChip(opty)))
     )
     // Trim down to limit the message size
     .slice(0, 10)
     // Generate the messages
     .map((opty) => singleOpportunityMessage(opty));
 
+  // Add the header
   messages.unshift(
-    "**Pair Name**\n:broom: Estimated 24H Fees / TVL\n:dollar: Market TVL\n:red_square: Bin Step\n:bookmark: Base Fee\n:white_check_mark: Rug Check"
+    "**Pair Name**\n:printer: Estimated Minimum 24H Fees / TVL\n:money_bag: Market TVL\n:ladder: Bin Step\n:dollar: Base Fee\n:white_check_mark: Rug Check"
   );
 
   // Combine the message array into a string
@@ -141,9 +163,10 @@ async function sendOppoprtunities(
     | ChatInputCommandInteraction<CacheType>
     | MessageContextMenuCommandInteraction<CacheType>
     | UserContextMenuCommandInteraction<CacheType>,
-  strict: boolean
+  strict: boolean,
+  blueChip = false
 ) {
-  const embeds = [createOpportunityEmbedding(strict)];
+  const embeds = [createOpportunityEmbedding(strict, blueChip)];
   interaction.reply({
     embeds,
   });
@@ -152,6 +175,7 @@ async function sendOppoprtunities(
 function registerCommands() {
   const app = CLIENT.application!;
 
+  // Set up the commands for everyone connected
   CLIENT.guilds.cache.forEach(async (guild) => {
     guild.commands.create({
       name: "degen",
@@ -161,8 +185,13 @@ function registerCommands() {
       name: "strict",
       description: "Get a list of strict opportunities",
     });
+    guild.commands.create({
+      name: "bluechip",
+      description: "Get a list of blue chip opportunities",
+    });
   });
 
+  // Set up the handlers
   CLIENT.on("interactionCreate", async (interaction: Interaction) => {
     if (!interaction.isCommand()) return;
     switch (interaction.commandName) {
@@ -172,15 +201,22 @@ function registerCommands() {
       case "strict":
         sendOppoprtunities(interaction, true);
         break;
+      case "bluechip":
+        sendOppoprtunities(interaction, true, true);
+        break;
     }
   });
 }
 
-// Register commands when the bot is ready
+// Initialize everything
 CLIENT.once("ready", async () => {
   console.log("Bot is ready.");
   registerCommands();
+  // Run the first refresh
   refreshOpportunities();
+  // Set up the periodic refresh
+  setInterval(refreshOpportunities, REFRESH_MS);
 });
 
+// Login
 CLIENT.login(process.env.DISCORD_BOT_TOKEN);
