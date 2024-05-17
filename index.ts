@@ -151,8 +151,8 @@ function createOpportunityEmbedding(
   // Build the API embedding
   return {
     title: `Top ${messages.length - 1} ${
-      !strict ? "Non-" : ""
-    }Strict List DLMM Opportunities\nLast updated <t:${Math.round(
+      !strict ? "Non-Strict List" : !blueChip ? "Strict List" : "Blue Chip"
+    } DLMM Opportunities\nLast updated <t:${Math.round(
       OPPORTUNITY_DATA.updated
     )}:R>`,
     description,
