@@ -1,13 +1,22 @@
 import {
-  ChannelType,
+  ChatInputCommandInteraction,
   Client,
   IntentsBitField,
+  MessageContextMenuCommandInteraction,
+  UserContextMenuCommandInteraction,
   type APIEmbed,
+  type CacheType,
+  type Interaction,
 } from "discord.js";
 import { getOpportunities, type OpportunityData } from "./opportunity-finder";
 import type { DexScreenerToken } from "./dex-screener";
 import { RUG_CHECK_EXCEPTIONS } from "./config";
 import { getJupiterTokenList } from "./jupiter-token-list";
+
+interface DiscordOpportunityData {
+  updated: number;
+  data: OpportunityData[];
+}
 
 // Verify the required environment variables
 const environmentErrors: string[] = [];
@@ -15,14 +24,36 @@ const environmentErrors: string[] = [];
 if (!process.env.DISCORD_BOT_TOKEN) {
   environmentErrors.push("DISCORD_BOT_TOKEN environment variable missing.");
 }
-if (!process.env.OPPORTUNITY_CHANNELS) {
-  environmentErrors.push("OPPORTUNITY_CHANNELS environment variable missing.");
-}
 if (environmentErrors.length > 0) {
   throw new Error(
     "Unable to start bot, environment not configured properly.\n" +
       environmentErrors.join("\n")
   );
+}
+
+// Instantiate the Discord client
+const CLIENT = new Client({
+  intents: [IntentsBitField.Flags.Guilds, IntentsBitField.Flags.GuildMessages],
+});
+
+// Set up opportunity data refresh
+const REFRESH_MS = process.env.REFRESH_MINUTES
+  ? Number(process.env.REFRESH_MINUTES) * 60 * 1000
+  : 15 * 60 * 1000;
+let OPPORTUNITY_DATA: DiscordOpportunityData = {
+  updated: 0,
+  data: [],
+};
+setInterval(refreshOpportunities, REFRESH_MS);
+
+async function refreshOpportunities() {
+  const tokenMap = await getJupiterTokenList();
+  const data = await getOpportunities(tokenMap);
+  OPPORTUNITY_DATA = {
+    updated: new Date().getTime() / 1000,
+    data,
+  };
+  return OPPORTUNITY_DATA;
 }
 
 function rugCheck(token: DexScreenerToken): string {
@@ -64,11 +95,17 @@ function singleOpportunityMessage(opty: OpportunityData): string {
   return message;
 }
 
-function createOpportunityEmbedding(
-  opportunities: OpportunityData[],
-  strict = false
-): APIEmbed {
-  const messages = opportunities
+function createOpportunityEmbedding(strict = false): APIEmbed {
+  if (OPPORTUNITY_DATA.data.length == 0) {
+    return {
+      title: "Updating",
+      description:
+        "Please try again in a minute, data is currently refreshing.",
+      color: 3329330,
+    };
+  }
+
+  const messages = OPPORTUNITY_DATA.data
     // Filter trending
     .filter(
       (opty) =>
@@ -91,60 +128,59 @@ function createOpportunityEmbedding(
   return {
     title: `Top ${messages.length - 1} ${
       !strict ? "Non-" : ""
-    }Strict List DLMM Opportunities`,
+    }Strict List DLMM Opportunities\nLast updated <t:${Math.round(
+      OPPORTUNITY_DATA.updated
+    )}:R>`,
     description,
     color: 3329330,
   };
 }
 
-async function sendChannelOpportunities(
-  client: Client,
-  channelNames: string[]
+async function sendOppoprtunities(
+  interaction:
+    | ChatInputCommandInteraction<CacheType>
+    | MessageContextMenuCommandInteraction<CacheType>
+    | UserContextMenuCommandInteraction<CacheType>,
+  strict: boolean
 ) {
-  const tokenMap = await getJupiterTokenList();
-  const opportunities = await getOpportunities(tokenMap);
-  const nonStrictOpportunities = createOpportunityEmbedding(
-    opportunities,
-    false
-  );
-  const strictOpportunities = createOpportunityEmbedding(opportunities, true);
-  const embeds = [nonStrictOpportunities, strictOpportunities];
+  const embeds = [createOpportunityEmbedding(strict)];
+  interaction.reply({
+    embeds,
+  });
+}
 
-  client.channels.cache.forEach(async (channel) => {
-    if (
-      channel.type == ChannelType.GuildText &&
-      channelNames.includes(channel.name)
-    ) {
-      try {
-        channel.send({
-          embeds,
-        });
-      } catch (err) {
-        console.error(err);
-      }
+function registerCommands() {
+  const app = CLIENT.application!;
+
+  CLIENT.guilds.cache.forEach(async (guild) => {
+    guild.commands.create({
+      name: "degen",
+      description: "Get a list of top non-strict opportunities",
+    });
+    guild.commands.create({
+      name: "strict",
+      description: "Get a list of strict opportunities",
+    });
+  });
+
+  CLIENT.on("interactionCreate", async (interaction: Interaction) => {
+    if (!interaction.isCommand()) return;
+    switch (interaction.commandName) {
+      case "degen":
+        sendOppoprtunities(interaction, false);
+        break;
+      case "strict":
+        sendOppoprtunities(interaction, true);
+        break;
     }
   });
 }
 
-// Get the broadcast channels
-const OPPORTUNITY_CHANNELS = process.env.OPPORTUNITY_CHANNELS!.split(/\s*,\s*/);
-
-// Instantiate the Discord client
-const client = new Client({
-  intents: [IntentsBitField.Flags.Guilds, IntentsBitField.Flags.GuildMessages],
+// Register commands when the bot is ready
+CLIENT.once("ready", async () => {
+  console.log("Bot is ready.");
+  registerCommands();
+  refreshOpportunities();
 });
 
-// Simple message when it's connected
-client.once("ready", async () => {
-  console.log("Bot is online!");
-  // Send opportunities when first connecting
-  sendChannelOpportunities(client, OPPORTUNITY_CHANNELS);
-
-  // Send opportunities every hour
-  setInterval(
-    () => sendChannelOpportunities(client, OPPORTUNITY_CHANNELS),
-    1000 * 60 * 60
-  );
-});
-
-client.login(process.env.DISCORD_BOT_TOKEN);
+CLIENT.login(process.env.DISCORD_BOT_TOKEN);

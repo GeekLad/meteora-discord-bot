@@ -27,9 +27,8 @@ GeekLad.
 - [Install Bun](https://bun.sh)
 - Create a `.env` with the following environment variables:
   - `DISCORD_BOT_TOKEN`: Your Discord bot's token
-  - `OPPORTUNITY_CHANNELS`: A comma separated list of channels for broadcasting
-    opportunities hourly
 - Run `bun run index.ts`
+- Use the bot commands `/strict` and `/degen`
 
 ## Credits
 
@@ -39,7 +38,8 @@ GeekLad.
 and this bot
 
 [@Foxtrot](https://x.com/foxtroteth) for looking at Geeklad's Google Apps
-script, and modifying it to create a Discord bot
+script, and modifying it to create a Discord bot and inspiring GeekLad to
+create is own and open sourcing it.
 
 [@benchow.sol](https://twitter.com/hellochow) for suggesting adding the
 trend indicator
