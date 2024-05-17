@@ -134,7 +134,7 @@ function createOpportunityEmbedding(
           (strict && blueChip && isBlueChip(opty)))
     )
     // Trim down to limit the message size
-    .slice(0, 20)
+    .slice(0, 15)
     // Generate the messages
     .map((opty) => singleOpportunityMessage(opty));
 
