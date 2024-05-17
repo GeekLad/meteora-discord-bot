@@ -290,6 +290,7 @@ function registerCommands() {
         break;
       case "pair":
         sendPairOpportunities(interaction);
+        break;
     }
   });
 }
