@@ -313,8 +313,7 @@ async function registerCommands() {
   await registerCommand({
     commandData: {
       name: "pair",
-      description:
-        "Get a list of DLMM opportunities for a specific pair.  Parameter *pairname* should be in the format TOKEN1-TOKEN2",
+      description: "Get a list of DLMM opportunities for a specific pair.",
       options: [
         {
           name: "pairname",
