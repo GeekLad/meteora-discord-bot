@@ -13,9 +13,16 @@ import type { DexScreenerToken } from "./dex-screener";
 import { BLUE_CHIPS, REFRESHING_MESSAGE } from "./config";
 import { getJupiterTokenList } from "./jupiter-token-list";
 
-interface DiscordOpportunityData {
+interface MeteoraBotOpportunityData {
   updated: number;
   data: OpportunityData[];
+}
+
+interface MeteoraBotCommand {
+  commandData: ApplicationCommandDataResolvable;
+  fn: (interaction: ChatInputCommandInteraction) => any | Promise<any>;
+  parameters?: string[];
+  helpText: string;
 }
 
 // Verify the required environment variables
@@ -40,7 +47,7 @@ const CLIENT = new Client({
 const REFRESH_MS = process.env.REFRESH_MINUTES
   ? Number(process.env.REFRESH_MINUTES) * 60 * 1000
   : 15 * 60 * 1000;
-let OPPORTUNITY_DATA: DiscordOpportunityData = {
+let OPPORTUNITY_DATA: MeteoraBotOpportunityData = {
   updated: 0,
   data: [],
 };
@@ -237,97 +244,98 @@ function sendPairOpportunities(interaction: ChatInputCommandInteraction) {
 }
 
 function sendHelp(interaction: ChatInputCommandInteraction) {
-  interaction.reply(
-    "**Meteora Bot Commands**\n\
-    **/degen**: Lists DLMM opportunities for non-strict list tokens\n\
-    **/strict**: Lists DLMM opportunities for strict list tokens\n\
-    **/bluechip**: Lists DLMM opportunities for total high-TVL tokens\n\
-    **/pair** *pairname*:  Lists DLMM opportunities for a specific token pair\n\
-    **/help**: See this again"
-  );
+  const commands: string[] = [];
+  COMMANDS.forEach((command, name) => {
+    commands.push(
+      `**/${name}${
+        command.parameters ? " *" + command.parameters.join(", ") + "*" : ""
+      }**: ${command.helpText}`
+    );
+  });
+  interaction.reply(`**Meteora Bot Commands**\n${commands.join("\n")}`);
 }
 
 // Map & helper function for command registration
-const COMMANDS = new Map<
-  string,
-  (interaction: ChatInputCommandInteraction) => any | Promise<any>
->();
-async function registerCommand(
-  guild: Guild,
-  commandData: ApplicationCommandDataResolvable,
-  fn: (interaction: ChatInputCommandInteraction) => any | Promise<any>
-) {
-  const command = await guild.commands.create(commandData);
-  COMMANDS.set(command.name, fn);
+const COMMANDS = new Map<string, MeteoraBotCommand>();
+async function registerCommand(meteoraBotCommand: MeteoraBotCommand) {
+  const command = await CLIENT.application!.commands.create(
+    meteoraBotCommand.commandData
+  );
+  const existingCommand = COMMANDS.get(command.name);
+  if (!existingCommand) {
+    COMMANDS.set(command.name, meteoraBotCommand);
+  }
 }
 
-function registerCommands() {
-  // Reset app commands to remove dupes
-  const app = CLIENT.application!;
-  app.commands.set([]);
-
-  // Set up commands for guilds
+async function registerCommands() {
+  // Reset guild commands to remove dupes
   CLIENT.guilds.cache.forEach(async (guild) => {
-    // Reset guild commands
     await guild.commands.set([]);
+  });
 
-    // Register all the commands
-    registerCommand(
-      guild,
-      {
-        name: "help",
-        description: "Get a list of all commands supported by the bot",
-      },
-      (interaction) => sendHelp(interaction)
-    );
-    registerCommand(
-      guild,
-      {
-        name: "degen",
-        description: "Get a list of top non-strict opportunities",
-      },
-      (interaction) => sendOpportunities(interaction, false)
-    );
-    registerCommand(
-      guild,
-      {
-        name: "strict",
-        description: "Get a list of strict opportunities",
-      },
-      (interaction) => sendOpportunities(interaction, true)
-    );
-    registerCommand(
-      guild,
-      {
-        name: "bluechip",
-        description: "Get a list of blue chip opportunities",
-      },
-      (interaction) => sendOpportunities(interaction, true, true)
-    );
-    registerCommand(
-      guild,
-      {
-        name: "pair",
-        description: "Get a list of the opportunities for a specific pair",
-        options: [
-          {
-            name: "pairname",
-            description:
-              "The name of the pair for which you want opportunities.  Use the format TOKEN1-TOKEN2",
-            type: ApplicationCommandOptionType.String,
-            required: true,
-          },
-        ],
-      },
-      (interaction) => sendPairOpportunities(interaction)
-    );
+  // Register all the commands
+  await CLIENT.application!.commands.set([]);
+  await registerCommand({
+    commandData: {
+      name: "help",
+      description: "Get a list of all commands supported by the bot",
+    },
+    fn: (interaction) => sendHelp(interaction),
+    helpText: "Display this info again",
+  });
+  await registerCommand({
+    commandData: {
+      name: "degen",
+      description:
+        "Get a list of DLMM opportunities for tokens not on the strict list",
+    },
+    fn: (interaction) => sendOpportunities(interaction, false),
+    helpText:
+      "Get a list of DLMM opportunities for tokens not on the strict list",
+  });
+  await registerCommand({
+    commandData: {
+      name: "strict",
+      description:
+        "Get a list of DLMM opportunities for tokens on the strict list",
+    },
+    fn: (interaction) => sendOpportunities(interaction, true),
+    helpText: "Get a list of DLMM opportunities for tokens on the strict list",
+  });
+  await registerCommand({
+    commandData: {
+      name: "bluechip",
+      description: 'Get a list of DLMM opportunities for "blue chip" tokens',
+    },
+    fn: (interaction) => sendOpportunities(interaction, true, true),
+    helpText: 'Get a list of DLMM opportunities for "blue chip" tokens',
+  });
+  await registerCommand({
+    commandData: {
+      name: "pair",
+      description:
+        "Get a list of DLMM opportunities for a specific pair.  Parameter *pairname* should be in the format TOKEN1-TOKEN2",
+      options: [
+        {
+          name: "pairname",
+          description:
+            "The name of the pair for which you want opportunities.  Use the format TOKEN1-TOKEN2",
+          type: ApplicationCommandOptionType.String,
+          required: true,
+        },
+      ],
+    },
+    fn: (interaction) => sendPairOpportunities(interaction),
+    helpText:
+      "Get a list of DLMM opportunities for a specific pair.  Parameter *pairname* should be in the format TOKEN1-TOKEN2",
+    parameters: ["pairname"],
   });
 
   // Set up the command handler
   CLIENT.on("interactionCreate", async (interaction: Interaction) => {
     if (interaction instanceof ChatInputCommandInteraction) {
-      const fn = COMMANDS.get(interaction.commandName);
-      fn!(interaction);
+      const command = COMMANDS.get(interaction.commandName);
+      command!.fn(interaction);
     }
   });
 }
