@@ -197,7 +197,6 @@ function createPairEmbedding(pairName: string): APIEmbed {
   }
   const pairs = OPPORTUNITY_DATA.data.filter(
     (opty) =>
-      opty.trend == "Up" &&
       symbols.includes(opty.base.symbol.toLowerCase()) &&
       symbols.includes(opty.quote.symbol.toLowerCase())
   );
@@ -232,6 +231,10 @@ function createPairEmbedding(pairName: string): APIEmbed {
 }
 
 function sendPairOpportunities(interaction: ChatInputCommandInteraction) {
+  if (OPPORTUNITY_DATA.data.length == 0) {
+    return REFRESHING_MESSAGE;
+  }
+
   const pairName = interaction.options.get("pairname");
   if (!pairName) {
     return interaction.reply("pairname parameter required");
@@ -273,7 +276,6 @@ async function registerCommands() {
   });
 
   // Register all the commands
-  await CLIENT.application!.commands.set([]);
   await registerCommand({
     commandData: {
       name: "help",
