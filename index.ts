@@ -2,7 +2,6 @@ import {
   ApplicationCommandOptionType,
   ChatInputCommandInteraction,
   Client,
-  Guild,
   IntentsBitField,
   type APIEmbed,
   type ApplicationCommandDataResolvable,
