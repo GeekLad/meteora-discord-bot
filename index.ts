@@ -245,6 +245,60 @@ function sendPairOpportunities(interaction: ChatInputCommandInteraction) {
   });
 }
 
+function createTokenEmbedding(token: string): APIEmbed {
+  token = token.trim();
+  const pairs = OPPORTUNITY_DATA.data.filter(
+    (opty) =>
+      opty.base.symbol.toLowerCase() == token.toLowerCase() ||
+      opty.quote.symbol.toLowerCase() == token.toLowerCase() ||
+      opty.base.address == token ||
+      opty.quote.address == token
+  );
+
+  if (pairs.length == 0) {
+    return {
+      title: "No Pairs Found",
+      description: `Could not find any pairs with the token ${token}`,
+      color: 3329330,
+    };
+  }
+
+  const messages = pairs
+    // Trim down to limit the message size
+    .slice(0, 10)
+    // Generate the messages
+    .map((opty) => singleOpportunityMessage(opty));
+
+  // Add the heading and combine the message array into a string
+  const blueChip = isBlueChip(pairs[0]);
+  addHeading(messages, blueChip);
+  const description = messages.join("\n\n");
+
+  // Build the API embedding
+  return {
+    title: `DLMM Opportunities for ${token.toUpperCase()}\nLast updated <t:${Math.round(
+      OPPORTUNITY_DATA.updated
+    )}:R>`,
+    description,
+    color: 3329330,
+  };
+}
+
+function sendTokenOpportunities(interaction: ChatInputCommandInteraction) {
+  if (OPPORTUNITY_DATA.data.length == 0) {
+    return REFRESHING_MESSAGE;
+  }
+
+  const token = interaction.options.get("token");
+  if (!token) {
+    return interaction.reply("token parameter required");
+  }
+  const embeds = [createTokenEmbedding(token.value as string)];
+  interaction.reply({
+    embeds,
+  });
+}
+
 function sendHelp(interaction: ChatInputCommandInteraction) {
   const commands: string[] = [];
   COMMANDS.forEach((command, name) => {
@@ -314,7 +368,7 @@ async function registerCommands() {
   await registerCommand({
     commandData: {
       name: "pair",
-      description: "Get a list of DLMM opportunities for a specific pair.",
+      description: "Get a list of DLMM opportunities for a specific pair",
       options: [
         {
           name: "pairname",
@@ -329,6 +383,24 @@ async function registerCommands() {
     helpText:
       "Get a list of DLMM opportunities for a specific pair.  Parameter *pairname* should be in the format TOKEN1-TOKEN2",
     parameters: ["pairname"],
+  });
+  await registerCommand({
+    commandData: {
+      name: "token",
+      description: "Get a list of DLMM opportunities for a specific token",
+      options: [
+        {
+          name: "token",
+          description:
+            "The symbol or address of the pair for which you want opportunities.",
+          type: ApplicationCommandOptionType.String,
+          required: true,
+        },
+      ],
+    },
+    fn: (interaction) => sendTokenOpportunities(interaction),
+    helpText: "Get a list of DLMM opportunities for a specific token.",
+    parameters: ["token"],
   });
 
   // Set up the command handler
