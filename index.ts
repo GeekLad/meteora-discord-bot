@@ -163,7 +163,7 @@ function createOpportunityEmbedding(
   };
 }
 
-async function sendOppoprtunities(
+async function sendOpportunities(
   interaction:
     | ChatInputCommandInteraction<CacheType>
     | MessageContextMenuCommandInteraction<CacheType>
@@ -284,13 +284,13 @@ function registerCommands() {
     if (!interaction.isCommand()) return;
     switch (interaction.commandName) {
       case "degen":
-        sendOppoprtunities(interaction, false);
+        sendOpportunities(interaction, false);
         break;
       case "strict":
-        sendOppoprtunities(interaction, true);
+        sendOpportunities(interaction, true);
         break;
       case "bluechip":
-        sendOppoprtunities(interaction, true, true);
+        sendOpportunities(interaction, true, true);
         break;
       case "pair":
         sendPairOpportunities(interaction);
