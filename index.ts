@@ -257,10 +257,11 @@ function sendHelp(interaction: ChatInputCommandInteraction) {
 
 // Map & helper function for command registration
 const COMMANDS = new Map<string, MeteoraBotCommand>();
-async function registerCommand(meteoraBotCommand: MeteoraBotCommand) {
-  const command = await CLIENT.application!.commands.create(
-    meteoraBotCommand.commandData
-  );
+async function registerCommand(
+  guild: Guild,
+  meteoraBotCommand: MeteoraBotCommand
+) {
+  const command = await guild.commands.create(meteoraBotCommand.commandData);
   const existingCommand = COMMANDS.get(command.name);
   if (!existingCommand) {
     COMMANDS.set(command.name, meteoraBotCommand);
@@ -268,66 +269,67 @@ async function registerCommand(meteoraBotCommand: MeteoraBotCommand) {
 }
 
 async function registerCommands() {
-  // Reset guild commands to remove dupes
-  CLIENT.guilds.cache.forEach(async (guild) => {
-    await guild.commands.set([]);
-  });
+  // Reset app commands to remove dupes
+  await CLIENT.application?.commands.set([]);
 
   // Register all the commands
-  await CLIENT.application!.commands.set([]);
-  await registerCommand({
-    commandData: {
-      name: "help",
-      description: "Get a list of all commands supported by the bot",
-    },
-    fn: (interaction) => sendHelp(interaction),
-    helpText: "Display this info again",
-  });
-  await registerCommand({
-    commandData: {
-      name: "degen",
-      description:
+  CLIENT.guilds.cache.forEach(async (guild) => {
+    await CLIENT.application!.commands.set([]);
+    await registerCommand(guild, {
+      commandData: {
+        name: "help",
+        description: "Get a list of all commands supported by the bot",
+      },
+      fn: (interaction) => sendHelp(interaction),
+      helpText: "Display this info again",
+    });
+    await registerCommand(guild, {
+      commandData: {
+        name: "degen",
+        description:
+          "Get a list of DLMM opportunities for tokens not on the strict list",
+      },
+      fn: (interaction) => sendOpportunities(interaction, false),
+      helpText:
         "Get a list of DLMM opportunities for tokens not on the strict list",
-    },
-    fn: (interaction) => sendOpportunities(interaction, false),
-    helpText:
-      "Get a list of DLMM opportunities for tokens not on the strict list",
-  });
-  await registerCommand({
-    commandData: {
-      name: "strict",
-      description:
+    });
+    await registerCommand(guild, {
+      commandData: {
+        name: "strict",
+        description:
+          "Get a list of DLMM opportunities for tokens on the strict list",
+      },
+      fn: (interaction) => sendOpportunities(interaction, true),
+      helpText:
         "Get a list of DLMM opportunities for tokens on the strict list",
-    },
-    fn: (interaction) => sendOpportunities(interaction, true),
-    helpText: "Get a list of DLMM opportunities for tokens on the strict list",
-  });
-  await registerCommand({
-    commandData: {
-      name: "bluechip",
-      description: 'Get a list of DLMM opportunities for "blue chip" tokens',
-    },
-    fn: (interaction) => sendOpportunities(interaction, true, true),
-    helpText: 'Get a list of DLMM opportunities for "blue chip" tokens',
-  });
-  await registerCommand({
-    commandData: {
-      name: "pair",
-      description: "Get a list of DLMM opportunities for a specific pair.",
-      options: [
-        {
-          name: "pairname",
-          description:
-            "The name of the pair for which you want opportunities.  Use the format TOKEN1-TOKEN2",
-          type: ApplicationCommandOptionType.String,
-          required: true,
-        },
-      ],
-    },
-    fn: (interaction) => sendPairOpportunities(interaction),
-    helpText:
-      "Get a list of DLMM opportunities for a specific pair.  Parameter *pairname* should be in the format TOKEN1-TOKEN2",
-    parameters: ["pairname"],
+    });
+    await registerCommand(guild, {
+      commandData: {
+        name: "bluechip",
+        description: 'Get a list of DLMM opportunities for "blue chip" tokens',
+      },
+      fn: (interaction) => sendOpportunities(interaction, true, true),
+      helpText: 'Get a list of DLMM opportunities for "blue chip" tokens',
+    });
+    await registerCommand(guild, {
+      commandData: {
+        name: "pair",
+        description: "Get a list of DLMM opportunities for a specific pair.",
+        options: [
+          {
+            name: "pairname",
+            description:
+              "The name of the pair for which you want opportunities.  Use the format TOKEN1-TOKEN2",
+            type: ApplicationCommandOptionType.String,
+            required: true,
+          },
+        ],
+      },
+      fn: (interaction) => sendPairOpportunities(interaction),
+      helpText:
+        "Get a list of DLMM opportunities for a specific pair.  Parameter *pairname* should be in the format TOKEN1-TOKEN2",
+      parameters: ["pairname"],
+    });
   });
 
   // Set up the command handler
@@ -343,10 +345,12 @@ async function registerCommands() {
 CLIENT.once("ready", async () => {
   console.log("Bot is ready.");
   registerCommands();
-  // Run the first refresh
-  refreshOpportunities();
-  // Set up the periodic refresh
-  setInterval(refreshOpportunities, REFRESH_MS);
+  if (!process.env.DEV_MODE) {
+    // Run the first refresh
+    refreshOpportunities();
+    // Set up the periodic refresh
+    setInterval(refreshOpportunities, REFRESH_MS);
+  }
 });
 
 // Login
