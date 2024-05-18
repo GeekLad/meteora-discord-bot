@@ -9,6 +9,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "@duneanalytics/client-sdk": "^0.1.5",
     "discord.js": "^14.15.2"
   }
 }

@@ -7,6 +7,7 @@ import {
   type DexScreenerToken,
 } from "./dex-screener";
 import type { JupiterTokenListToken } from "./jupiter-token-list";
+import type { AllSolanaOpportunites } from "./dune";
 
 export interface DexScreenerPairEnriched extends DexScreenerPair {
   liquidity: DexScreenerLiquidityEnriched;
@@ -44,6 +45,10 @@ export interface OpportunityData {
   strict: boolean;
 }
 
+export interface AllSolanaOpportunitesEnriched extends AllSolanaOpportunites {
+  strict: boolean;
+}
+
 function addMeteoraData(
   tokenMap: Map<string, JupiterTokenListToken>,
   dexScreenerData: DexScreenerPair[],
@@ -60,17 +65,9 @@ function addMeteoraData(
       (m) => m.address == dexScreenerPair.pairAddress
     )!;
     // Add the strict flag
-    const strictTokenBase = tokenMap.get(dexScreenerPair.baseToken.address);
-    if (strictTokenBase) {
-      const strictTokenQuote = tokenMap.get(dexScreenerPair.quoteToken.address);
-      if (strictTokenQuote) {
-        dexScreenerPair.strict = true;
-      } else {
-        dexScreenerPair.strict = false;
-      }
-    } else {
-      dexScreenerPair.strict = false;
-    }
+    dexScreenerPair.strict =
+      tokenMap.has(dexScreenerPair.baseToken.address) &&
+      tokenMap.has(dexScreenerPair.quoteToken.address);
 
     // Get the liquidity
     if (!dexScreenerPair.liquidity) {
@@ -175,5 +172,16 @@ export async function getOpportunities(
       feeToTvl: pair.feeToTvl,
       strict: pair.strict,
     };
+  });
+}
+
+export function addStrictFlagToAllSolanaOpportunities(
+  tokenMap: Map<string, JupiterTokenListToken>,
+  opportunities: AllSolanaOpportunites[]
+) {
+  const enrichedOpportunities =
+    opportunities as AllSolanaOpportunitesEnriched[];
+  enrichedOpportunities.forEach((opty) => {
+    opty.strict = tokenMap.has(opty.address);
   });
 }

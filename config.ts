@@ -25,3 +25,4 @@ export const REFRESHING_MESSAGE = {
   description: "Please try again in a minute, data is currently refreshing.",
   color: 3329330,
 };
+export const DUNE_QUERY_ID = 3734698;

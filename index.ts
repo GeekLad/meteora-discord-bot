@@ -7,10 +7,20 @@ import {
   type ApplicationCommandDataResolvable,
   type Interaction,
 } from "discord.js";
-import { getOpportunities, type OpportunityData } from "./opportunity-finder";
+import {
+  addStrictFlagToAllSolanaOpportunities,
+  getOpportunities,
+  type AllSolanaOpportunitesEnriched,
+  type OpportunityData,
+} from "./opportunity-finder";
 import type { DexScreenerToken } from "./dex-screener";
 import { BLUE_CHIPS, REFRESHING_MESSAGE } from "./config";
 import { getJupiterTokenList } from "./jupiter-token-list";
+import {
+  getAllSolanaOpportunities,
+  refreshAllSolanaOpportunities,
+} from "./dune";
+import { DuneClient } from "@duneanalytics/client-sdk";
 
 interface MeteoraBotOpportunityData {
   updated: number;
@@ -30,6 +40,9 @@ const environmentErrors: string[] = [];
 if (!process.env.DISCORD_BOT_TOKEN) {
   environmentErrors.push("DISCORD_BOT_TOKEN environment variable missing.");
 }
+if (!process.env.DUNE_API_KEY) {
+  environmentErrors.push("DUNE_API_KEY environment variable missing.");
+}
 if (environmentErrors.length > 0) {
   throw new Error(
     "Unable to start bot, environment not configured properly.\n" +
@@ -38,33 +51,73 @@ if (environmentErrors.length > 0) {
 }
 
 // Instantiate the Discord client
-const CLIENT = new Client({
+const DISCORD_CLIENT = new Client({
   intents: [IntentsBitField.Flags.Guilds, IntentsBitField.Flags.GuildMessages],
 });
+
+// Instantiate the Dune client
+const DUNE_CLIENT = new DuneClient(process.env.DUNE_API_KEY!);
 
 // Set up opportunity data refresh
 const REFRESH_MS = process.env.REFRESH_MINUTES
   ? Number(process.env.REFRESH_MINUTES) * 60 * 1000
   : 15 * 60 * 1000;
-let OPPORTUNITY_DATA: MeteoraBotOpportunityData = {
+let DLMM_OPPORTUNITY_DATA: MeteoraBotOpportunityData = {
   updated: 0,
   data: [],
 };
+const ENABLE_DUNE_REFRESH = Boolean(process.env.ENABLE_DUNE_REFRESH);
+let SOLANA_OPPORTUNITY_DATA: AllSolanaOpportunitesEnriched[] = [];
 
-async function refreshOpportunities() {
+async function refreshDlmmOpportunities() {
   const tokenMap = await getJupiterTokenList();
   try {
     const data = await getOpportunities(tokenMap);
-    OPPORTUNITY_DATA = {
+    DLMM_OPPORTUNITY_DATA = {
       updated: new Date().getTime() / 1000,
       data,
     };
-    return OPPORTUNITY_DATA;
   } catch (err) {
     console.error(err);
     console.error("Retrying refresh in 30 seconds...");
-    setInterval(refreshOpportunities, 30 * 1000);
+    DLMM_OPPORTUNITY_DATA = {
+      updated: 0,
+      data: [],
+    };
+    setInterval(refreshDlmmOpportunities, 30 * 1000);
   }
+}
+
+async function refreshAll() {
+  if (ENABLE_DUNE_REFRESH) {
+    await refreshAllSolanaOpportunities(DUNE_CLIENT);
+  }
+  const [data, tokenMap] = await Promise.all([
+    getAllSolanaOpportunities(DUNE_CLIENT),
+    getJupiterTokenList(),
+  ]);
+  if (data) {
+    const enrichedData = data as AllSolanaOpportunitesEnriched[];
+    addStrictFlagToAllSolanaOpportunities(tokenMap, enrichedData);
+    SOLANA_OPPORTUNITY_DATA = enrichedData;
+  } else {
+    SOLANA_OPPORTUNITY_DATA = [];
+    console.error("No results in Dune refresh.");
+    console.error("Retrying refresh in 30 seconds...");
+    setInterval(() => refreshAllSolanaOpportunities(DUNE_CLIENT), 30 * 1000);
+  }
+}
+
+function sendHelp(interaction: ChatInputCommandInteraction) {
+  const commands: string[] = [];
+  COMMANDS.forEach((command, name) => {
+    commands.push(
+      `**/${name}${
+        command.parameters ? " *" + command.parameters.join(", ") + "*" : ""
+      }**: ${command.helpText}`
+    );
+  });
+  interaction.reply(`**Meteora Bot Commands**\n${commands.join("\n")}`);
 }
 
 function rugCheck(token: DexScreenerToken): string {
@@ -134,11 +187,11 @@ function createOpportunityEmbedding(
   strict = false,
   blueChip = false
 ): APIEmbed {
-  if (OPPORTUNITY_DATA.data.length == 0) {
+  if (DLMM_OPPORTUNITY_DATA.data.length == 0) {
     return REFRESHING_MESSAGE;
   }
 
-  const messages = OPPORTUNITY_DATA.data
+  const messages = DLMM_OPPORTUNITY_DATA.data
     // Filter trending
     .filter(
       (opty) =>
@@ -161,7 +214,7 @@ function createOpportunityEmbedding(
     title: `Top ${messages.length - 1} ${
       !strict ? "Non-Strict List" : !blueChip ? "Strict List" : "Blue Chip"
     } DLMM Opportunities\nLast updated <t:${Math.round(
-      OPPORTUNITY_DATA.updated
+      DLMM_OPPORTUNITY_DATA.updated
     )}:R>`,
     description,
     color: 3329330,
@@ -195,7 +248,7 @@ function createPairEmbedding(pairName: string): APIEmbed {
   if (symbols.length != 2) {
     return invalidPir(pairName);
   }
-  const pairs = OPPORTUNITY_DATA.data.filter(
+  const pairs = DLMM_OPPORTUNITY_DATA.data.filter(
     (opty) =>
       symbols.includes(opty.base.symbol.toLowerCase()) &&
       symbols.includes(opty.quote.symbol.toLowerCase())
@@ -224,14 +277,14 @@ function createPairEmbedding(pairName: string): APIEmbed {
   return {
     title: `DLMM Opportunities for ${
       pairs[0].pairName
-    }\nLast updated <t:${Math.round(OPPORTUNITY_DATA.updated)}:R>`,
+    }\nLast updated <t:${Math.round(DLMM_OPPORTUNITY_DATA.updated)}:R>`,
     description,
     color: 3329330,
   };
 }
 
 function sendPairOpportunities(interaction: ChatInputCommandInteraction) {
-  if (OPPORTUNITY_DATA.data.length == 0) {
+  if (DLMM_OPPORTUNITY_DATA.data.length == 0) {
     return REFRESHING_MESSAGE;
   }
 
@@ -247,7 +300,7 @@ function sendPairOpportunities(interaction: ChatInputCommandInteraction) {
 
 function createTokenEmbedding(token: string): APIEmbed {
   token = token.trim();
-  const pairs = OPPORTUNITY_DATA.data.filter(
+  const pairs = DLMM_OPPORTUNITY_DATA.data.filter(
     (opty) =>
       opty.base.symbol.toLowerCase() == token.toLowerCase() ||
       opty.quote.symbol.toLowerCase() == token.toLowerCase() ||
@@ -277,7 +330,7 @@ function createTokenEmbedding(token: string): APIEmbed {
   // Build the API embedding
   return {
     title: `DLMM Opportunities for ${token.toUpperCase()}\nLast updated <t:${Math.round(
-      OPPORTUNITY_DATA.updated
+      DLMM_OPPORTUNITY_DATA.updated
     )}:R>`,
     description,
     color: 3329330,
@@ -285,7 +338,7 @@ function createTokenEmbedding(token: string): APIEmbed {
 }
 
 function sendTokenOpportunities(interaction: ChatInputCommandInteraction) {
-  if (OPPORTUNITY_DATA.data.length == 0) {
+  if (DLMM_OPPORTUNITY_DATA.data.length == 0) {
     return REFRESHING_MESSAGE;
   }
 
@@ -299,22 +352,91 @@ function sendTokenOpportunities(interaction: ChatInputCommandInteraction) {
   });
 }
 
-function sendHelp(interaction: ChatInputCommandInteraction) {
-  const commands: string[] = [];
-  COMMANDS.forEach((command, name) => {
-    commands.push(
-      `**/${name}${
-        command.parameters ? " *" + command.parameters.join(", ") + "*" : ""
-      }**: ${command.helpText}`
+function buildAllOpportunityMessage(
+  opty: AllSolanaOpportunitesEnriched
+): string {
+  return `**${opty.symbol}**${
+    opty.address != opty.symbol ? ` (${opty.address})` : ""
+  }\n⏱ <t:${Math.round(opty.updated / 1000)}:R> 💰 ${opty.volume.toLocaleString(
+    "en-US",
+    {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }
+  )} 📈 ${opty.volumeToTvl}${
+    !opty.strict
+      ? ` [✅ RugCheck](https://rugcheck.xyz/tokens/${opty.address})`
+      : ""
+  }\n`;
+}
+
+function sendAllOpportunities(interaction: ChatInputCommandInteraction) {
+  if (DLMM_OPPORTUNITY_DATA.data.length == 0) {
+    return REFRESHING_MESSAGE;
+  }
+
+  const optyType = interaction.options.get("type")?.value as string;
+  if (!["degen", "strict", "bluechip"].includes(optyType)) {
+    return interaction.reply(
+      `${optyType} is not a valid type.  Type must be \`degen\`, \`strict\`, or \`bluechip\``
     );
+  }
+
+  const opportunities = SOLANA_OPPORTUNITY_DATA
+    // Filter the opportunities according to type
+    .filter((opty) => {
+      switch (optyType) {
+        case "bluechip":
+          return opty.strict && BLUE_CHIPS.includes(opty.symbol.toLowerCase());
+        case "strict":
+          return opty.strict;
+        case "degen":
+          return !opty.strict;
+      }
+    })
+    // Limit to the top results
+    .slice(0, 10);
+
+  // Build the messages
+  const messages = opportunities.map((opty) =>
+    buildAllOpportunityMessage(opty)
+  );
+
+  messages.unshift(
+    `**Symbol** (address)\n⏱Last Updated\n💰 Volume\n📈 Volume / TVL Ratio\n${
+      optyType == "degen" ? " ✅ Rugcheck\n" : ""
+    }`
+  );
+
+  let description = messages.join("\n");
+
+  // If we haven't updated in over an hour, add the link to the report to the description
+  const oldestUpdate = opportunities
+    .map((opty) => opty.updated)
+    .reduce((prior, current) => (current < prior ? prior : current));
+  if (new Date().getTime() - oldestUpdate > 1000 * 60 * 60) {
+    description +=
+      "\n\nTo get the latest data available, [update the Dune table](https://dune.com/queries/3734698)";
+  }
+
+  interaction.reply({
+    embeds: [
+      {
+        title: `Top ${
+          messages.length - 1
+        } highest turnover ${optyType} tokens across all Solana protocols for the past 2 hours`,
+        color: 3329330,
+        description,
+      },
+    ],
   });
-  interaction.reply(`**Meteora Bot Commands**\n${commands.join("\n")}`);
 }
 
 // Map & helper function for command registration
 const COMMANDS = new Map<string, MeteoraBotCommand>();
 async function registerCommand(meteoraBotCommand: MeteoraBotCommand) {
-  const command = await CLIENT.application!.commands.create(
+  const command = await DISCORD_CLIENT.application!.commands.create(
     meteoraBotCommand.commandData
   );
   const existingCommand = COMMANDS.get(command.name);
@@ -325,7 +447,7 @@ async function registerCommand(meteoraBotCommand: MeteoraBotCommand) {
 
 async function registerCommands() {
   // Reset guild commands to remove dupes
-  CLIENT.guilds.cache.forEach(async (guild) => {
+  DISCORD_CLIENT.guilds.cache.forEach(async (guild) => {
     await guild.commands.set([]);
   });
 
@@ -402,9 +524,28 @@ async function registerCommands() {
     helpText: "Get a list of DLMM opportunities for a specific token.",
     parameters: ["token"],
   });
+  await registerCommand({
+    commandData: {
+      name: "all",
+      description:
+        "Get a list of all market making opportunities across all of Solana",
+      options: [
+        {
+          name: "type",
+          description: "Enter one of the following: degen, strict, bluechip",
+          type: ApplicationCommandOptionType.String,
+          required: true,
+        },
+      ],
+    },
+    fn: (interaction) => sendAllOpportunities(interaction),
+    helpText:
+      "Get a list of all market making opportunities across all of Solana.  type must be degen, strict, or bluechip",
+    parameters: ["type"],
+  });
 
   // Set up the command handler
-  CLIENT.on("interactionCreate", async (interaction: Interaction) => {
+  DISCORD_CLIENT.on("interactionCreate", async (interaction: Interaction) => {
     if (interaction instanceof ChatInputCommandInteraction) {
       const command = COMMANDS.get(interaction.commandName);
       command!.fn(interaction);
@@ -413,14 +554,18 @@ async function registerCommands() {
 }
 
 // Initialize everything
-CLIENT.once("ready", async () => {
+DISCORD_CLIENT.once("ready", async () => {
   console.log("Bot is ready.");
   registerCommands();
   // Run the first refresh
-  refreshOpportunities();
+  refreshDlmmOpportunities();
+  refreshAll();
   // Set up the periodic refresh
-  setInterval(refreshOpportunities, REFRESH_MS);
+  setInterval(() => {
+    refreshDlmmOpportunities();
+    refreshAll();
+  }, REFRESH_MS);
 });
 
 // Login
-CLIENT.login(process.env.DISCORD_BOT_TOKEN);
+DISCORD_CLIENT.login(process.env.DISCORD_BOT_TOKEN);
