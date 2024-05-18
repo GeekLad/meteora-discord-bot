@@ -2,11 +2,10 @@ import {
   ApplicationCommandOptionType,
   ChatInputCommandInteraction,
   Client,
+  Guild,
   IntentsBitField,
-  MessageContextMenuCommandInteraction,
-  UserContextMenuCommandInteraction,
   type APIEmbed,
-  type CacheType,
+  type ApplicationCommandDataResolvable,
   type Interaction,
 } from "discord.js";
 import { getOpportunities, type OpportunityData } from "./opportunity-finder";
@@ -164,10 +163,7 @@ function createOpportunityEmbedding(
 }
 
 async function sendOpportunities(
-  interaction:
-    | ChatInputCommandInteraction<CacheType>
-    | MessageContextMenuCommandInteraction<CacheType>
-    | UserContextMenuCommandInteraction<CacheType>,
+  interaction: ChatInputCommandInteraction,
   strict: boolean,
   blueChip = false
 ) {
@@ -229,12 +225,7 @@ function createPairEmbedding(pairName: string): APIEmbed {
   };
 }
 
-function sendPairOpportunities(
-  interaction:
-    | ChatInputCommandInteraction<CacheType>
-    | MessageContextMenuCommandInteraction<CacheType>
-    | UserContextMenuCommandInteraction<CacheType>
-) {
+function sendPairOpportunities(interaction: ChatInputCommandInteraction) {
   const pairName = interaction.options.get("pairname");
   if (!pairName) {
     return interaction.reply("pairname parameter required");
@@ -245,56 +236,98 @@ function sendPairOpportunities(
   });
 }
 
+function sendHelp(interaction: ChatInputCommandInteraction) {
+  interaction.reply(
+    "**Meteora Bot Commands**\n\
+    **/degen**: Lists DLMM opportunities for non-strict list tokens\n\
+    **/strict**: Lists DLMM opportunities for strict list tokens\n\
+    **/bluechip**: Lists DLMM opportunities for total high-TVL tokens\n\
+    **/pair** *pairname*:  Lists DLMM opportunities for a specific token pair\n\
+    **/help**: See this again"
+  );
+}
+
+// Map & helper function for command registration
+const COMMANDS = new Map<
+  string,
+  (interaction: ChatInputCommandInteraction) => any | Promise<any>
+>();
+async function registerCommand(
+  guild: Guild,
+  commandData: ApplicationCommandDataResolvable,
+  fn: (interaction: ChatInputCommandInteraction) => any | Promise<any>
+) {
+  const command = await guild.commands.create(commandData);
+  COMMANDS.set(command.name, fn);
+}
+
 function registerCommands() {
-  // Reset guild commands (removes dupes)
-  CLIENT.guilds.cache.forEach(async (guild) => {
-    guild.commands.set([]);
-  });
-
-  // Set app commands
+  // Reset app commands to remove dupes
   const app = CLIENT.application!;
-  app.commands.create({
-    name: "degen",
-    description: "Get a list of top non-strict opportunities",
-  });
-  app.commands.create({
-    name: "strict",
-    description: "Get a list of strict opportunities",
-  });
-  app.commands.create({
-    name: "bluechip",
-    description: "Get a list of blue chip opportunities",
-  });
-  app.commands.create({
-    name: "pair",
-    description: "Get a list of the opportunities for a specific pair",
-    options: [
+  app.commands.set([]);
+
+  // Set up commands for guilds
+  CLIENT.guilds.cache.forEach(async (guild) => {
+    // Reset guild commands
+    await guild.commands.set([]);
+
+    // Register all the commands
+    registerCommand(
+      guild,
       {
-        name: "pairname",
-        description:
-          "The name of the pair for which you want opportunities.  Use the format TOKEN1-TOKEN2",
-        type: ApplicationCommandOptionType.String,
-        required: true,
+        name: "help",
+        description: "Get a list of all commands supported by the bot",
       },
-    ],
+      (interaction) => sendHelp(interaction)
+    );
+    registerCommand(
+      guild,
+      {
+        name: "degen",
+        description: "Get a list of top non-strict opportunities",
+      },
+      (interaction) => sendOpportunities(interaction, false)
+    );
+    registerCommand(
+      guild,
+      {
+        name: "strict",
+        description: "Get a list of strict opportunities",
+      },
+      (interaction) => sendOpportunities(interaction, true)
+    );
+    registerCommand(
+      guild,
+      {
+        name: "bluechip",
+        description: "Get a list of blue chip opportunities",
+      },
+      (interaction) => sendOpportunities(interaction, true, true)
+    );
+    registerCommand(
+      guild,
+      {
+        name: "pair",
+        description: "Get a list of the opportunities for a specific pair",
+        options: [
+          {
+            name: "pairname",
+            description:
+              "The name of the pair for which you want opportunities.  Use the format TOKEN1-TOKEN2",
+            type: ApplicationCommandOptionType.String,
+            required: true,
+          },
+        ],
+      },
+      (interaction) => sendPairOpportunities(interaction)
+    );
   });
 
-  // Set up the handlers
+  // Set up the command handler
   CLIENT.on("interactionCreate", async (interaction: Interaction) => {
-    if (!interaction.isCommand()) return;
-    switch (interaction.commandName) {
-      case "degen":
-        sendOpportunities(interaction, false);
-        break;
-      case "strict":
-        sendOpportunities(interaction, true);
-        break;
-      case "bluechip":
-        sendOpportunities(interaction, true, true);
-        break;
-      case "pair":
-        sendPairOpportunities(interaction);
-        break;
+    if (interaction instanceof ChatInputCommandInteraction) {
+      const fn = COMMANDS.get(interaction.commandName);
+      fn!(interaction);
     }
   });
 }
