@@ -92,16 +92,16 @@ function singleOpportunityMessage(opty: OpportunityData): string {
     style: "percent",
     maximumFractionDigits: 2,
   });
-  const message = `**[${pairName}](https://app.meteora.ag/dlmm/${pairAddress})** :printer: ${feestoTvl} :money_bag: ${liquidity} :ladder: ${binStep} :dollar: ${baseFee}`;
+  const message = `**[${pairName}](https://app.meteora.ag/dlmm/${pairAddress})** 🖨 ${feestoTvl} 💰 ${liquidity} 🪜 ${binStep} 💵 ${baseFee}`;
   const rugChecks = [rugCheck(opty.base), rugCheck(opty.quote)];
   if (rugChecks[0] != "" && rugChecks[1] != "") {
-    return message + " :white_check_mark: " + rugChecks.join(", ");
+    return message + " ✅ " + rugChecks.join(", ");
   }
   if (rugChecks[0] != "") {
-    return message + " :white_check_mark: " + rugChecks[0];
+    return message + " ✅ " + rugChecks[0];
   }
   if (rugChecks[1] != "") {
-    return message + " :white_check_mark: " + rugChecks[1];
+    return message + " ✅ " + rugChecks[1];
   }
   return message;
 }
@@ -124,8 +124,8 @@ function isBlueChip(opty: OpportunityData): boolean {
 
 function addHeading(messages: string[], blueChip: boolean) {
   messages.unshift(
-    `**Pair Name**\n:printer: Estimated Minimum 24H Fees / TVL\n:money_bag: Market TVL\n:ladder: Bin Step\n:dollar: Base Fee${
-      !blueChip ? "\n:white_check_mark: Rug Check" : ""
+    `**Pair Name**\n🖨 Estimated Minimum 24H Fees / TVL\n💰 Market TVL\n🪜 Bin Step\n💵 Base Fee${
+      !blueChip ? "\n✅ Rug Check" : ""
     }`
   );
 }
