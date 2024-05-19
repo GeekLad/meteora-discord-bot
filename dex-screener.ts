@@ -111,14 +111,14 @@ export async function getDexScreenerPairs(
         data.pairs.forEach((pair) => dexScreenerData.push(pair));
       } else {
         console.warn(
-          `${new Date().toLocaleDateString()}: Warning, error fetching: ${
+          `${new Date().toLocaleTimeString()}: Warning, error fetching: ${
             fetchUrls[i]
           }`
         );
       }
     } catch (err) {
       console.warn(
-        `${new Date().toLocaleDateString()}: Warning, error fetching: ${
+        `${new Date().toLocaleTimeString()}: Warning, error fetching: ${
           fetchUrls[i]
         }`
       );
