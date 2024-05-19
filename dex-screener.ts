@@ -110,10 +110,18 @@ export async function getDexScreenerPairs(
       if (data.pairs) {
         data.pairs.forEach((pair) => dexScreenerData.push(pair));
       } else {
-        console.warn(`Warning, error fetching: ${fetchUrls[i]}`);
+        console.warn(
+          `${new Date().toLocaleDateString()}: Warning, error fetching: ${
+            fetchUrls[i]
+          }`
+        );
       }
     } catch (err) {
-      console.warn(`Warning, error fetching: ${fetchUrls[i]}`);
+      console.warn(
+        `${new Date().toLocaleDateString()}: Warning, error fetching: ${
+          fetchUrls[i]
+        }`
+      );
     }
   });
   return dexScreenerData;

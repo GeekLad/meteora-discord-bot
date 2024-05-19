@@ -70,6 +70,7 @@ const ENABLE_DUNE_REFRESH = Boolean(process.env.ENABLE_DUNE_REFRESH);
 let SOLANA_OPPORTUNITY_DATA: AllSolanaOpportunitesEnriched[] = [];
 
 async function refreshDlmmOpportunities() {
+  console.log(`${new Date().toLocaleDateString()}: Refreshing DLMM data`);
   const tokenMap = await getJupiterTokenList();
   try {
     const data = await getOpportunities(tokenMap);
@@ -79,7 +80,9 @@ async function refreshDlmmOpportunities() {
     };
   } catch (err) {
     console.error(err);
-    console.error("Retrying refresh in 30 seconds...");
+    console.error(
+      `${new Date().toLocaleDateString()}: Retrying refresh in 30 seconds...`
+    );
     DLMM_OPPORTUNITY_DATA = {
       updated: 0,
       data: [],
@@ -102,8 +105,12 @@ async function refreshAll() {
     SOLANA_OPPORTUNITY_DATA = enrichedData;
   } else {
     SOLANA_OPPORTUNITY_DATA = [];
-    console.error("No results in Dune refresh.");
-    console.error("Retrying refresh in 30 seconds...");
+    console.error(
+      `${new Date().toLocaleDateString()}: No results in Dune refresh.`
+    );
+    console.error(
+      `${new Date().toLocaleDateString()}: Retrying refresh in 30 seconds...`
+    );
     setInterval(() => refreshAllSolanaOpportunities(DUNE_CLIENT), 30 * 1000);
   }
 }
@@ -556,7 +563,7 @@ async function registerCommands() {
 
 // Initialize everything
 DISCORD_CLIENT.once("ready", async () => {
-  console.log("Bot is ready.");
+  console.log(`${new Date().toLocaleDateString()}: Bot is ready.`);
   registerCommands();
   // Run the first refresh
   refreshDlmmOpportunities();
