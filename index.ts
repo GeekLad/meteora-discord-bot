@@ -399,13 +399,15 @@ function createAllOpportunityEmbed(optyType: string): APIEmbed {
     // Limit to the top results
     .slice(0, 10);
 
+  const refreshTime = Math.round(
+    DLMM_OPPORTUNITY_DATA.updated + REFRESH_MS / 1000
+  );
+
   if (opportunities.length == 0) {
     return {
       title: `No results`,
       color: 3329330,
-      description: `No results for ${optyType} tokens across all Solana protocols for the past 2 hours\n\nTo get the latest data available, [update the Dune table](https://dune.com/queries/3734698) and wait about ${Math.round(
-        REFRESH_MS / 1000 / 60
-      )} minutes`,
+      description: `No results for ${optyType} tokens across all Solana protocols for the past 2 hours\n\nTo get the latest data available, [update the Dune table](https://dune.com/queries/3734698) and try again <t:${refreshTime}:R>`,
     };
   }
 
@@ -427,9 +429,7 @@ function createAllOpportunityEmbed(optyType: string): APIEmbed {
     .map((opty) => opty.updated)
     .reduce((prior, current) => (current < prior ? prior : current));
   if (new Date().getTime() - mostRecentUpdate > 1000 * 60 * 60) {
-    description += `\n\nTo get the latest data available, [update the Dune table](https://dune.com/queries/3734698) and wait about ${Math.round(
-      REFRESH_MS / 1000 / 60
-    )} minutes`;
+    description += `\n\nTo get the latest data available, [update the Dune table](https://dune.com/queries/3734698) and try again <t:${refreshTime}:R>`;
   }
 
   const optyTypeTitle =
