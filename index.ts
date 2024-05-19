@@ -417,7 +417,7 @@ function sendAllOpportunities(interaction: ChatInputCommandInteraction) {
     .reduce((prior, current) => (current < prior ? prior : current));
   if (new Date().getTime() - oldestUpdate > 1000 * 60 * 60) {
     description += `\n\nTo get the latest data available, [update the Dune table](https://dune.com/queries/3734698) and wait about ${Math.round(
-      REFRESH_MS / 1000
+      REFRESH_MS / 1000 / 60
     )} minutes`;
   }
 
