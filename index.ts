@@ -233,7 +233,12 @@ async function sendOpportunities(
   strict: boolean,
   blueChip = false
 ) {
-  const embeds = [createOpportunityEmbedding(strict, blueChip)];
+  const optyType = blueChip ? "bluechip" : strict ? "strict" : "degen";
+
+  const embeds = [
+    createAllOpportunityEmbed(optyType),
+    createOpportunityEmbedding(strict, blueChip),
+  ];
   interaction.reply({
     embeds,
   });
@@ -359,7 +364,7 @@ function sendTokenOpportunities(interaction: ChatInputCommandInteraction) {
   });
 }
 
-function buildAllOpportunityMessage(
+function singleAllOpportunityMessage(
   opty: AllSolanaOpportunitesEnriched
 ): string {
   return `**${opty.symbol}**${
@@ -378,18 +383,7 @@ function buildAllOpportunityMessage(
   }\n`;
 }
 
-function sendAllOpportunities(interaction: ChatInputCommandInteraction) {
-  if (DLMM_OPPORTUNITY_DATA.data.length == 0) {
-    return REFRESHING_MESSAGE;
-  }
-
-  const optyType = interaction.options.get("type")?.value as string;
-  if (!["degen", "strict", "bluechip"].includes(optyType)) {
-    return interaction.reply(
-      `${optyType} is not a valid type.  Type must be \`degen\`, \`strict\`, or \`bluechip\``
-    );
-  }
-
+function createAllOpportunityEmbed(optyType: string): APIEmbed {
   const opportunities = SOLANA_OPPORTUNITY_DATA
     // Filter the opportunities according to type
     .filter((opty) => {
@@ -405,9 +399,19 @@ function sendAllOpportunities(interaction: ChatInputCommandInteraction) {
     // Limit to the top results
     .slice(0, 10);
 
+  if (opportunities.length == 0) {
+    return {
+      title: `No results`,
+      color: 3329330,
+      description: `No results for ${optyType} tokens across all Solana protocols for the past 2 hours\n\nTo get the latest data available, [update the Dune table](https://dune.com/queries/3734698) and wait about ${Math.round(
+        REFRESH_MS / 1000 / 60
+      )} minutes`,
+    };
+  }
+
   // Build the messages
   const messages = opportunities.map((opty) =>
-    buildAllOpportunityMessage(opty)
+    singleAllOpportunityMessage(opty)
   );
 
   messages.unshift(
@@ -418,26 +422,50 @@ function sendAllOpportunities(interaction: ChatInputCommandInteraction) {
 
   let description = messages.join("\n");
 
-  // If we haven't updated in over an hour, add the link to the report to the description
-  const oldestUpdate = opportunities
+  // If the most recent results are over an hour old, add the link to the report to the description
+  const mostRecentUpdate = opportunities
     .map((opty) => opty.updated)
     .reduce((prior, current) => (current < prior ? prior : current));
-  if (new Date().getTime() - oldestUpdate > 1000 * 60 * 60) {
+  if (new Date().getTime() - mostRecentUpdate > 1000 * 60 * 60) {
     description += `\n\nTo get the latest data available, [update the Dune table](https://dune.com/queries/3734698) and wait about ${Math.round(
       REFRESH_MS / 1000 / 60
     )} minutes`;
   }
 
+  const optyTypeTitle =
+    optyType == "bluechip"
+      ? "Blue Chip"
+      : optyType == "strict"
+      ? "Strict List"
+      : "Non-Strict List";
+
+  return {
+    title: `Top ${
+      messages.length - 1
+    } Highest Turnover ${optyTypeTitle} Tokens Across All Solana Protocols for the Past 2 Hours`,
+    color: 3329330,
+    description,
+  };
+}
+
+function sendAllOpportunities(interaction: ChatInputCommandInteraction) {
+  if (DLMM_OPPORTUNITY_DATA.data.length == 0) {
+    return REFRESHING_MESSAGE;
+  }
+
+  const optyType = String(interaction.options.get("type")!.value)
+    .trim()
+    .toLowerCase();
+  if (!["degen", "strict", "bluechip"].includes(optyType)) {
+    return interaction.reply(
+      `${optyType} is not a valid type.  Type must be \`degen\`, \`strict\`, or \`bluechip\``
+    );
+  }
+
+  const embeds = [createAllOpportunityEmbed(optyType)];
+
   interaction.reply({
-    embeds: [
-      {
-        title: `Top ${
-          messages.length - 1
-        } highest turnover ${optyType} tokens across all Solana protocols for the past 2 hours`,
-        color: 3329330,
-        description,
-      },
-    ],
+    embeds,
   });
 }
 
