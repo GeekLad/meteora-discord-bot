@@ -16,7 +16,10 @@ export async function refreshAllSolanaOpportunities(client: DuneClient) {
 export async function getAllSolanaOpportunities(
   client: DuneClient
 ): Promise<AllSolanaOpportunites[] | undefined> {
-  const result = await client.getLatestResult({ queryId: DUNE_QUERY_ID });
+  const result = await client.getLatestResult({
+    queryId: DUNE_QUERY_ID,
+    opts: { maxAgeHours: 24 * 7 },
+  });
   if (result.result) {
     return result.result.rows.map((opty) => {
       return {
