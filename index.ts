@@ -433,7 +433,7 @@ function createAllOpportunityEmbed(optyType: string): APIEmbed {
     .map((opty) => opty.updated)
     .reduce((prior, current) => (current < prior ? prior : current));
   if (new Date().getTime() - mostRecentUpdate > 1000 * 60 * 60) {
-    description += `\n\nTo get the latest data available, [update the Dune table](https://dune.com/queries/3734698) and try again <t:${refreshTime}:R>`;
+    description += `\n\nTo get the latest data available, [update the Dune table](https://dune.com/queries/${DUNE_QUERY_ID}) and try again <t:${refreshTime}:R>`;
   }
 
   const optyTypeTitle =
