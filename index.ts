@@ -195,6 +195,7 @@ function addHeading(messages: string[], blueChip: boolean) {
 }
 
 function createOpportunityEmbedding(
+  minliquidity: number,
   strict = false,
   blueChip = false
 ): APIEmbed {
@@ -206,6 +207,7 @@ function createOpportunityEmbedding(
     // Filter trending
     .filter(
       (opty) =>
+        opty.liquidity > minliquidity &&
         opty.trend == "Up" &&
         ((!strict && isDegen(opty)) ||
           (strict && !blueChip && isStrict(opty)) ||
@@ -238,10 +240,13 @@ async function sendOpportunities(
   blueChip = false
 ) {
   const optyType = blueChip ? "bluechip" : strict ? "strict" : "degen";
+  const minliquidity = interaction.options.get("minliquidity")
+    ? (interaction.options.get("minliquidity")!.value as number)
+    : 600;
 
   const embeds = [
     createAllOpportunityEmbed(optyType),
-    createOpportunityEmbedding(strict, blueChip),
+    createOpportunityEmbedding(minliquidity, strict, blueChip),
   ];
   interaction.reply({
     embeds,
@@ -505,6 +510,14 @@ async function registerCommands() {
       name: "degen",
       description:
         "Get a list of DLMM opportunities for tokens not on the strict list",
+      options: [
+        {
+          name: "minliquidity",
+          description: "The minimum amount of liquidity.",
+          type: ApplicationCommandOptionType.Number,
+          required: false,
+        },
+      ],
     },
     fn: (interaction) => sendOpportunities(interaction, false),
     helpText:
@@ -515,6 +528,14 @@ async function registerCommands() {
       name: "strict",
       description:
         "Get a list of DLMM opportunities for tokens on the strict list",
+      options: [
+        {
+          name: "minliquidity",
+          description: "The minimum amount of liquidity.",
+          type: ApplicationCommandOptionType.Number,
+          required: false,
+        },
+      ],
     },
     fn: (interaction) => sendOpportunities(interaction, true),
     helpText: "Get a list of DLMM opportunities for tokens on the strict list",
@@ -523,6 +544,14 @@ async function registerCommands() {
     commandData: {
       name: "bluechip",
       description: 'Get a list of DLMM opportunities for "blue chip" tokens',
+      options: [
+        {
+          name: "minliquidity",
+          description: "The minimum amount of liquidity.",
+          type: ApplicationCommandOptionType.Number,
+          required: false,
+        },
+      ],
     },
     fn: (interaction) => sendOpportunities(interaction, true, true),
     helpText: 'Get a list of DLMM opportunities for "blue chip" tokens',
@@ -599,14 +628,18 @@ DISCORD_CLIENT.once("ready", async () => {
   registerCommands();
   // Run the first refresh
   refreshDlmmOpportunities();
-  refreshAll();
   // Set up the periodic refresh
   setInterval(() => {
     refreshDlmmOpportunities();
   }, DLMM_REFRESH_MS);
-  setInterval(() => {
+
+  // Do the same for Dune
+  if (!process.env.DEBUG) {
     refreshAll();
-  }, DUNE_REFRESH_MS);
+    setInterval(() => {
+      refreshAll();
+    }, DUNE_REFRESH_MS);
+  }
 });
 
 // Login

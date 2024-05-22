@@ -18,12 +18,20 @@ https://discord.com/oauth2/authorize?client_id=1239340511765074061
 ## Bot Commands
 
 - **`/help`**: Display this info again
-- **`/degen`**: Get a list of DLMM opportunities for tokens not on the strict list
-- **`/strict`**: Get a list of DLMM opportunities for tokens on the strict list
-- **`/bluechip`**: Get a list of DLMM opportunities for "blue chip" tokens
-- **`/pair`_`pairname`_**: Get a list of DLMM opportunities for a specific pair. Parameter pairname should be in the format `TOKEN1-TOKEN2`
+- **`/degen`_`minliquidity`_**: Get a list of DLMM opportunities for tokens not
+  on the strict list. Optional _minliquidity_ parameter for the minimum liquidity.
+  Default _minliquidity_ is 600.
+- **`/strict`_`minliquidity`_**: Get a list of DLMM opportunities for tokens on
+  the strict list. Optional _minliquidity_ parameter for the minimum liquidity.
+  Default _minliquidity_ is 600.
+- **`/bluechip`_`minliquidity`_**: Get a list of DLMM opportunities for "blue
+  chip" tokens. Optional _minliquidity_ parameter for the minimum liquidity.
+  Default _minliquidity_ is 600.
+- **`/pair`_`pairname`_**: Get a list of DLMM opportunities for a specific pair.
+  Parameter pairname should be in the format `TOKEN1-TOKEN2`.
 - **`/token`_`token`_**: Get a list of DLMM opportunities for a specific token.
-- **`/all`_`type`_**: Get a list of all market making opportunities across all of Solana. type must be degen, strict, or bluechip
+- **`/all`_`type`_**: Get a list of all market making opportunities across all
+  of Solana. type must be degen, strict, or bluechip
 
 ## Technical Info
 
@@ -61,9 +69,14 @@ their investment preferences.
 - Create a `.env` with the following environment variables:
   - `DISCORD_BOT_TOKEN`: Your Discord bot's token
   - `DUNE_API_KEY`: Your [Dune API key](https://dune.com/settings/api)
-  - `DLMM_REFRESH_MINUTES`: The number of minutes to wait between refreshes for DLMM opportunities (defaults to 15 minutes)
-  - `DUNE_REFRESH_MINUTES`: The number of minutes to wait between refreshes for all opportunities (defaults to 60 minutes)
-  - `ENABLE_DUNE_REFRESH`: Flag to enable the re-running of the Dune query. This will cost API credits.
+  - `DLMM_REFRESH_MINUTES`: The number of minutes to wait between refreshes for
+    DLMM opportunities (defaults to 15 minutes)
+  - `DUNE_REFRESH_MINUTES`: The number of minutes to wait between refreshes for
+    all opportunities (defaults to 60 minutes)
+  - `ENABLE_DUNE_REFRESH`: Flag to enable the re-running of the Dune query.
+    This will cost API credits.
+  - `DEBUG`: Flag to disable Dune, to avoid spending credits while testing out
+    other stuff.
 - Run `bun run index.ts`
 - Use the bot commands `/strict` and `/degen`
 
