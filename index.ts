@@ -14,7 +14,7 @@ import {
   type OpportunityData,
 } from "./opportunity-finder";
 import type { DexScreenerToken } from "./dex-screener";
-import { BLUE_CHIPS, REFRESHING_MESSAGE } from "./config";
+import { BLUE_CHIPS, DUNE_QUERY_ID, REFRESHING_MESSAGE } from "./config";
 import { getJupiterTokenList } from "./jupiter-token-list";
 import {
   getAllSolanaOpportunities,
@@ -411,7 +411,7 @@ function createAllOpportunityEmbed(optyType: string): APIEmbed {
     return {
       title: `No results`,
       color: 3329330,
-      description: `No results for ${optyType} tokens across all Solana protocols for the past 2 hours\n\nTo get the latest data available, [update the Dune table](https://dune.com/queries/3734698) and try again <t:${refreshTime}:R>`,
+      description: `No results for ${optyType} tokens across all Solana protocols for the past 2 hours\n\nTo get the latest data available, [update the Dune table](https://dune.com/queries/${DUNE_QUERY_ID}) and try again <t:${refreshTime}:R>`,
     };
   }
 
