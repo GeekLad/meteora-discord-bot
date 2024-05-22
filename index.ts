@@ -59,9 +59,13 @@ const DISCORD_CLIENT = new Client({
 const DUNE_CLIENT = new DuneClient(process.env.DUNE_API_KEY!);
 
 // Set up opportunity data refresh
-const REFRESH_MS = process.env.REFRESH_MINUTES
-  ? Number(process.env.REFRESH_MINUTES) * 60 * 1000
+const DLMM_REFRESH_MS = process.env.DLMM_REFRESH_MINUTES
+  ? Number(process.env.DLMM_REFRESH_MINUTES) * 60 * 1000
   : 15 * 60 * 1000;
+const DUNE_REFRESH_MS = process.env.DUNE_REFRESH_MINUTES
+  ? Number(process.env.DUNE_REFRESH_MINUTES) * 60 * 1000
+  : 60 * 60 * 1000;
+
 let DLMM_OPPORTUNITY_DATA: MeteoraBotOpportunityData = {
   updated: 0,
   data: [],
@@ -400,7 +404,7 @@ function createAllOpportunityEmbed(optyType: string): APIEmbed {
     .slice(0, 10);
 
   const refreshTime = Math.round(
-    DLMM_OPPORTUNITY_DATA.updated + REFRESH_MS / 1000
+    DLMM_OPPORTUNITY_DATA.updated + DLMM_REFRESH_MS / 1000
   );
 
   if (opportunities.length == 0) {
@@ -599,8 +603,10 @@ DISCORD_CLIENT.once("ready", async () => {
   // Set up the periodic refresh
   setInterval(() => {
     refreshDlmmOpportunities();
+  }, DLMM_REFRESH_MS);
+  setInterval(() => {
     refreshAll();
-  }, REFRESH_MS);
+  }, DUNE_REFRESH_MS);
 });
 
 // Login

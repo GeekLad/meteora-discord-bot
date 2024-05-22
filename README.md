@@ -61,7 +61,8 @@ their investment preferences.
 - Create a `.env` with the following environment variables:
   - `DISCORD_BOT_TOKEN`: Your Discord bot's token
   - `DUNE_API_KEY`: Your [Dune API key](https://dune.com/settings/api)
-  - `REFRESH_MINUTES`: The number of minutes to wait between refreshes (defaults to 15 minutes)
+  - `DLMM_REFRESH_MINUTES`: The number of minutes to wait between refreshes for DLMM opportunities (defaults to 15 minutes)
+  - `DUNE_REFRESH_MINUTES`: The number of minutes to wait between refreshes for all opportunities (defaults to 60 minutes)
   - `ENABLE_DUNE_REFRESH`: Flag to enable the re-running of the Dune query. This will cost API credits.
 - Run `bun run index.ts`
 - Use the bot commands `/strict` and `/degen`
