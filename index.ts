@@ -617,7 +617,7 @@ async function registerCommands() {
   DISCORD_CLIENT.on("interactionCreate", async (interaction: Interaction) => {
     if (interaction instanceof ChatInputCommandInteraction) {
       const command = COMMANDS.get(interaction.commandName);
-      command!.fn(interaction);
+      command?.fn(interaction);
     }
   });
 }
