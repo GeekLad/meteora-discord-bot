@@ -111,11 +111,11 @@ function addMeteoraData(
 
     // Calculate 24H fee / TVL
     dexScreenerPair.feeToTvl = {
-      h24: dexScreenerPair.fees24h.h24 / dexScreenerPair.liquidity.meteora,
-      h6: dexScreenerPair.fees24h.h6 / dexScreenerPair.liquidity.meteora,
-      h1: dexScreenerPair.fees24h.h1 / dexScreenerPair.liquidity.meteora,
-      m5: dexScreenerPair.fees24h.m5 / dexScreenerPair.liquidity.meteora,
-      min: dexScreenerPair.fees24h.min / dexScreenerPair.liquidity.meteora,
+      h24: dexScreenerPair.fees24h.h24 / dexScreenerPair.liquidity.usd,
+      h6: dexScreenerPair.fees24h.h6 / dexScreenerPair.liquidity.usd,
+      h1: dexScreenerPair.fees24h.h1 / dexScreenerPair.liquidity.usd,
+      m5: dexScreenerPair.fees24h.m5 / dexScreenerPair.liquidity.usd,
+      min: dexScreenerPair.fees24h.min / dexScreenerPair.liquidity.usd,
     };
 
     // Determine the fee trend
@@ -164,7 +164,7 @@ export async function getOpportunities(
       quote: pair.quoteToken,
       binStep: pair.bin_step,
       baseFee: pair.base_fee,
-      liquidity: pair.liquidity.meteora,
+      liquidity: pair.liquidity.usd,
       fdv: pair.fdv,
       volume24h: pair.volume24h,
       trend: pair.trend,
