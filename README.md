@@ -8,12 +8,11 @@ Report on Dune](https://dune.com/geeklad/solana-dex-volume-to-tvl). It
 provides users with useful data on potential market making opportunities on
 Meteora DLMMs.
 
-## Installing the Bot on a Discord Server
+## Use on the Meteora Discord Server
 
-To install the bot, just go to this OAuth URL, and follow the steps to add it
-to a Discord server:
-
-https://discord.com/oauth2/authorize?client_id=1239340511765074061
+The easiest way to use the bot is to simply join the join the
+[🤖 ｜ dlmm-opps-bot](https://discord.com/channels/841152225564950528/1240680906923049080)
+channel on the [Meteora Discord Server](https://discord.com/invite/meteora).
 
 ## Bot Commands
 
@@ -32,6 +31,13 @@ https://discord.com/oauth2/authorize?client_id=1239340511765074061
 - **`/token`_`token`_**: Get a list of DLMM opportunities for a specific token.
 - **`/all`_`type`_**: Get a list of all market making opportunities across all
   of Solana. type must be degen, strict, or bluechip
+
+## Installing the Bot on Your Own Discord Server
+
+If you want to install the bot on your own Discord server, go to this OAuth URL,
+and follow the steps to add it to your server:
+
+https://discord.com/oauth2/authorize?client_id=1239340511765074061
 
 ## Technical Info
 
