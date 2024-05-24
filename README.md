@@ -97,6 +97,12 @@ their investment preferences.
 - Stop the bot with the pm2 stop script: `./pm2-stop.sh`
 - You can use pm2 commands with `npx pm2` (`npx pm2 status`, `npx pm2 log`, etc.)
 
+### Compiling Google Apps Script for Google Sheets
+
+To compile the app to use in Google Sheets, run `./build-gs.sh`. This will
+output the `google-app-script.gs` file, which will provide a valid Google App
+Script that can be used in Google Sheets.
+
 ## Credits
 
 [@MeteoraAG](https://x.com/MeteoraAG) for creating Meteora

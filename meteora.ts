@@ -1,4 +1,5 @@
 import { METEORA_API_URL } from "./config";
+import type { UnifiedFetcher } from "./util";
 
 export interface MeteoraDlmmPair {
   address: string;
@@ -29,9 +30,11 @@ export interface MeteoraDlmmPair {
   hide: boolean;
 }
 
-export async function getMeteoraPairs(): Promise<MeteoraDlmmPair[]> {
+export async function getMeteoraPairs(
+  fetcher: UnifiedFetcher = fetch
+): Promise<MeteoraDlmmPair[]> {
   // Fetch all pairs from the Meteora API
-  const response = await fetch(METEORA_API_URL);
+  const response = await fetcher(METEORA_API_URL);
   const responseText = await response.text();
   const pairs: MeteoraDlmmPair[] = JSON.parse(responseText);
   return pairs;

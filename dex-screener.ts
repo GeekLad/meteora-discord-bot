@@ -1,4 +1,5 @@
 import { DEX_SCRENER_API_URL, MAX_URL_LENGTH } from "./config";
+import { multiFetch, type UnifiedMultiFetcher } from "./util";
 
 export interface DexScreenerApiData {
   schemaVersion: string;
@@ -95,14 +96,15 @@ function addressesToDexScreenerUrls(addresses: string[]): string[] {
 }
 
 export async function getDexScreenerPairs(
-  addresses: string[]
+  addresses: string[],
+  multiFetcher: UnifiedMultiFetcher = multiFetch
 ): Promise<DexScreenerPair[]> {
   // Split the addresses into URLs that are less than the max # of characters
   const fetchUrls = addressesToDexScreenerUrls(addresses);
 
   // Fetch the data from DEX Screener
   const dexScreenerData: DexScreenerPair[] = [];
-  const responses = await Promise.all(fetchUrls.map((url) => fetch(url)));
+  const responses = await multiFetcher(fetchUrls);
   responses.forEach(async (response, i) => {
     const responseText = await response.text();
     try {

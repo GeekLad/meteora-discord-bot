@@ -1,4 +1,5 @@
 import { JUPITER_TOKEN_STRICT_LIST_API } from "./config";
+import type { UnifiedFetcher } from "./util";
 
 export interface JupiterTokenListToken {
   address: string;
@@ -25,10 +26,10 @@ export enum JupiterTokenListTag {
   Wormhole = "wormhole",
 }
 
-export async function getJupiterTokenList(): Promise<
-  Map<string, JupiterTokenListToken>
-> {
-  const response = await fetch(JUPITER_TOKEN_STRICT_LIST_API);
+export async function getJupiterTokenList(
+  fetcher: UnifiedFetcher = fetch
+): Promise<Map<string, JupiterTokenListToken>> {
+  const response = await fetcher(JUPITER_TOKEN_STRICT_LIST_API);
   const data: JupiterTokenListToken[] = JSON.parse(await response.text());
   const map: Map<string, JupiterTokenListToken> = new Map();
   data.forEach((token) => map.set(token.address, token));

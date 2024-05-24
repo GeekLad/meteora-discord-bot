@@ -1,0 +1,9 @@
+{
+  "getJupiterTokenList": "getJupiterTokenList_",
+  "getMeteoraPairs": "getMeteoraPairs_",
+  "multiFetch": "multiFetch_",
+  "addressesToDexScreenerUrls": "addressesToDexScreenerUrls_",
+  "getDexScreenerPairs": "getDexScreenerPairs_",
+  "addMeteoraData": "addMeteoraData_",
+  "getOpportunities": "getOpportunities_"
+}

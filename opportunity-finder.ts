@@ -8,6 +8,12 @@ import {
 } from "./dex-screener";
 import type { JupiterTokenListToken } from "./jupiter-token-list";
 import type { AllSolanaOpportunites } from "./dune";
+import {
+  multiFetch,
+  type UnifiedFetcher,
+  type UnifiedMultiFetcher,
+} from "./util";
+import { BLUE_CHIPS } from "./config";
 
 export interface DexScreenerPairEnriched extends DexScreenerPair {
   liquidity: DexScreenerLiquidityEnriched;
@@ -44,6 +50,7 @@ export interface OpportunityData {
   fees24h: DexScreenerActivityInfoEnriched;
   feeToTvl: DexScreenerActivityInfoEnriched;
   strict: boolean;
+  bluechip: boolean;
 }
 
 export interface AllSolanaOpportunitesEnriched extends AllSolanaOpportunites {
@@ -146,16 +153,18 @@ function addMeteoraData(
 }
 
 export async function getOpportunities(
-  tokenMap: Map<string, JupiterTokenListToken>
+  tokenMap: Map<string, JupiterTokenListToken>,
+  fetcher: UnifiedFetcher = fetch,
+  multiFetcher: UnifiedMultiFetcher = multiFetch
 ): Promise<OpportunityData[]> {
   // Fetch the Meteora data
-  const meteoraPairs = await getMeteoraPairs();
+  const meteoraPairs = await getMeteoraPairs(fetcher);
 
   // Create an array of addresses to pass to the DEX Screener API
   const addresses = meteoraPairs.map((pair) => pair.address);
 
   // Fetch the data from the DEX Screener API
-  let dexScreenerPairs = await getDexScreenerPairs(addresses);
+  let dexScreenerPairs = await getDexScreenerPairs(addresses, multiFetcher);
 
   // Enrich the DEX Screener data with Meteora data
   const enrichedDexScreenerPairs = addMeteoraData(
@@ -181,6 +190,9 @@ export async function getOpportunities(
       fees24h: pair.fees24h,
       feeToTvl: pair.feeToTvl,
       strict: pair.strict,
+      bluechip:
+        BLUE_CHIPS.includes(pair.baseToken.symbol.toLowerCase()) &&
+        BLUE_CHIPS.includes(pair.quoteToken.symbol.toLowerCase()),
     };
   });
 }
