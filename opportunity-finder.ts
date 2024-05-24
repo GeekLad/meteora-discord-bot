@@ -27,6 +27,7 @@ export interface DexScreenerLiquidityEnriched extends DexScreenerLiquidity {
 export interface DexScreenerActivityInfoEnriched
   extends DexScreenerActivityInfo {
   min: number;
+  max: number;
 }
 
 export interface OpportunityData {
@@ -92,8 +93,15 @@ function addMeteoraData(
       h1: dexScreenerPair.volume.h1 * 24,
       m5: dexScreenerPair.volume.m5 * 288,
       min: 0,
+      max: 0,
     };
     dexScreenerPair.volume24h.min = Math.min(
+      dexScreenerPair.volume24h.h24,
+      dexScreenerPair.volume24h.h6,
+      dexScreenerPair.volume24h.h1,
+      dexScreenerPair.volume24h.m5
+    );
+    dexScreenerPair.volume24h.max = Math.max(
       dexScreenerPair.volume24h.h24,
       dexScreenerPair.volume24h.h6,
       dexScreenerPair.volume24h.h1,
@@ -107,6 +115,7 @@ function addMeteoraData(
       h1: dexScreenerPair.base_fee * dexScreenerPair.volume24h.h1,
       m5: dexScreenerPair.base_fee * dexScreenerPair.volume24h.m5,
       min: dexScreenerPair.base_fee * dexScreenerPair.volume24h.min,
+      max: dexScreenerPair.base_fee * dexScreenerPair.volume24h.max,
     };
 
     // Calculate 24H fee / TVL
@@ -116,9 +125,10 @@ function addMeteoraData(
       h1: dexScreenerPair.fees24h.h1 / dexScreenerPair.liquidity.usd,
       m5: dexScreenerPair.fees24h.m5 / dexScreenerPair.liquidity.usd,
       min: dexScreenerPair.fees24h.min / dexScreenerPair.liquidity.usd,
+      max: dexScreenerPair.fees24h.max / dexScreenerPair.liquidity.usd,
     };
 
-    // Determine the fee trend
+    // Determine the volume trend
     const trendNumbers: number[] = [];
     trendNumbers.push(
       dexScreenerPair.volume24h.m5 >= dexScreenerPair.volume24h.h1 ? 1 : -1
