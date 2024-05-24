@@ -93,8 +93,9 @@ their investment preferences.
     This will cost API credits.
   - `DEBUG`: Flag to disable Dune, to avoid spending credits while testing out
     other stuff.
-- Run `bun run index.ts`
-- Use the bot commands `/strict` and `/degen`
+- Run the bot with the pm2 launch script: `./pm2-start.sh`
+- Stop the bot with the pm2 stop script: `./pm2-stop.sh`
+- You can use pm2 commands with `npx pm2` (`npx pm2 status`, `npx pm2 log`, etc.)
 
 ## Credits
 

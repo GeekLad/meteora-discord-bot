@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@duneanalytics/client-sdk": "^0.1.5",
-    "discord.js": "^14.15.2"
+    "discord.js": "^14.15.2",
+    "pm2": "^5.3.1"
   }
 }
