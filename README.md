@@ -17,20 +17,30 @@ channel on the [Meteora Discord Server](https://discord.com/invite/meteora).
 ## Bot Commands
 
 - **`/help`**: Display this info again
-- **`/degen`_`minliquidity`_**: Get a list of DLMM opportunities for tokens not
-  on the strict list. Optional _minliquidity_ parameter for the minimum liquidity.
-  Default _minliquidity_ is 600.
-- **`/strict`_`minliquidity`_**: Get a list of DLMM opportunities for tokens on
-  the strict list. Optional _minliquidity_ parameter for the minimum liquidity.
-  Default _minliquidity_ is 600.
-- **`/bluechip`_`minliquidity`_**: Get a list of DLMM opportunities for "blue
-  chip" tokens. Optional _minliquidity_ parameter for the minimum liquidity.
-  Default _minliquidity_ is 600.
-- **`/pair`_`pairname`_**: Get a list of DLMM opportunities for a specific pair.
-  Parameter pairname should be in the format `TOKEN1-TOKEN2`.
-- **`/token`_`token`_**: Get a list of DLMM opportunities for a specific token.
+- **`/degen` _`minliquidity`_ _`estimationmode`_**: Get a list of DLMM
+  opportunities for tokens not on the strict list. Optional _minliquidity_
+  parameter for the minimum liquidity. Default _minliquidity_ is `600`. Optional
+  _estimationmode_ indicates whether to use the min or max estimated fees.  
+  Default _estimationmode_ is `min`.
+- **`/strict` _`minliquidity`_ _`estimationmode`_**: Get a list of DLMM
+  opportunities for tokens on the strict list. Optional _minliquidity_ parameter
+  for the minimum liquidity. Default _minliquidity_ is `600`. Optional
+  _estimationmode_ indicates whether to use the min or max estimated fees.  
+   Default _estimationmode_ is `min`.
+- **`/bluechip` _`minliquidity`_ _`estimationmode`_**: Get a list of DLMM
+  opportunities for "blue chip" tokens. Optional _minliquidity_ parameter for
+  the minimum liquidity. Default _minliquidity_ is `600`. Optional
+  _estimationmode_ indicates whether to use the min or max estimated fees.  
+   Default _estimationmode_ is `min`.
+- **`/pair` _`pairname`_ _`estimationmode`_**: Get a list of DLMM opportunities
+  for a specific pair. Parameter pairname should be in the format
+  `TOKEN1-TOKEN2`. Optional _estimationmode_ indicates whether to use the min
+  or max estimated fees. Default _estimationmode_ is `min`.
+- **`/token` _`token`_ _`estimationmode`_**: Get a list of DLMM opportunities
+  for a specific token. Optional _estimationmode_ indicates whether to use the
+  min or max estimated fees. Default _estimationmode_ is `min`.
 - **`/all`_`type`_**: Get a list of all market making opportunities across all
-  of Solana. type must be degen, strict, or bluechip
+  of Solana. type must be degen, strict, or bluechip.
 
 ## Installing the Bot on Your Own Discord Server
 

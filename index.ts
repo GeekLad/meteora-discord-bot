@@ -124,7 +124,7 @@ function sendHelp(interaction: ChatInputCommandInteraction) {
   COMMANDS.forEach((command, name) => {
     commands.push(
       `**/${name}${
-        command.parameters ? " *" + command.parameters.join(", ") + "*" : ""
+        command.parameters ? " *" + command.parameters.join(" ") + "*" : ""
       }**: ${command.helpText}`
     );
   });
@@ -138,13 +138,22 @@ function rugCheck(token: DexScreenerToken): string {
   return "";
 }
 
-function singleOpportunityMessage(opty: OpportunityData): string {
+function singleOpportunityMessage(
+  opty: OpportunityData,
+  estimationmode: "min" | "max"
+): string {
   const pairAddress = opty.pairAddress;
   const pairName = opty.pairName;
-  const feestoTvl = opty.feeToTvl.min.toLocaleString("en-US", {
-    style: "percent",
-    maximumFractionDigits: 2,
-  });
+  const feestoTvl =
+    estimationmode == "min"
+      ? opty.feeToTvl.min.toLocaleString("en-US", {
+          style: "percent",
+          maximumFractionDigits: 2,
+        })
+      : opty.feeToTvl.max.toLocaleString("en-US", {
+          style: "percent",
+          maximumFractionDigits: 2,
+        });
 
   const liquidity = opty.liquidity.toLocaleString("en-US", {
     style: "currency",
@@ -186,9 +195,15 @@ function isBlueChip(opty: OpportunityData): boolean {
   );
 }
 
-function addHeading(messages: string[], blueChip: boolean) {
+function addHeading(
+  messages: string[],
+  blueChip: boolean,
+  estimationMode: "min" | "max"
+) {
   messages.unshift(
-    `**Pair Name**\n🖨 Estimated Minimum 24H Fees / TVL\n💰 Market TVL\n🪜 Bin Step\n💵 Base Fee${
+    `**Pair Name**\n🖨 Estimated ${
+      estimationMode == "min" ? "Minimum" : "Maximum"
+    } 24H Fees / TVL\n💰 Market TVL\n🪜 Bin Step\n💵 Base Fee${
       !blueChip ? "\n✅ Rug Check" : ""
     }`
   );
@@ -197,7 +212,8 @@ function addHeading(messages: string[], blueChip: boolean) {
 function createOpportunityEmbedding(
   minliquidity: number,
   strict = false,
-  blueChip = false
+  blueChip = false,
+  estimationmode: "min" | "max" = "min"
 ): APIEmbed {
   if (DLMM_OPPORTUNITY_DATA.data.length == 0) {
     return REFRESHING_MESSAGE;
@@ -213,13 +229,20 @@ function createOpportunityEmbedding(
           (strict && !blueChip && isStrict(opty)) ||
           (strict && blueChip && isBlueChip(opty)))
     )
+    // Sort by min or max
+    .sort((a, b) => {
+      if (estimationmode == "min") {
+        return b.feeToTvl.min - a.feeToTvl.min;
+      }
+      return b.feeToTvl.max - a.feeToTvl.max;
+    })
     // Trim down to limit the message size
     .slice(0, 10)
     // Generate the messages
-    .map((opty) => singleOpportunityMessage(opty));
+    .map((opty) => singleOpportunityMessage(opty, estimationmode));
 
   // Add the heading and combine the message array into a string
-  addHeading(messages, blueChip);
+  addHeading(messages, blueChip, estimationmode);
   const description = messages.join("\n\n");
 
   // Build the API embedding
@@ -234,6 +257,29 @@ function createOpportunityEmbedding(
   };
 }
 
+function getEstimationMode(
+  interaction: ChatInputCommandInteraction
+): "min" | "max" | "" {
+  const estimationmode = interaction.options.get("estimationmode")
+    ? (interaction.options.get("estimationmode")!.value as string)
+        .trim()
+        .toLowerCase()
+    : "min";
+
+  if (estimationmode != "min" && estimationmode != "max") {
+    interaction.reply({
+      embeds: [
+        {
+          title: "Invalid Estimation Mode",
+          description: "Estimation mode must be min or max",
+        },
+      ],
+    });
+    return "";
+  }
+  return estimationmode;
+}
+
 async function sendOpportunities(
   interaction: ChatInputCommandInteraction,
   strict: boolean,
@@ -243,10 +289,15 @@ async function sendOpportunities(
   const minliquidity = interaction.options.get("minliquidity")
     ? (interaction.options.get("minliquidity")!.value as number)
     : 600;
+  const estimationmode = getEstimationMode(interaction);
+
+  if (estimationmode == "") {
+    return;
+  }
 
   const embeds = [
     createAllOpportunityEmbed(optyType),
-    createOpportunityEmbedding(minliquidity, strict, blueChip),
+    createOpportunityEmbedding(minliquidity, strict, blueChip, estimationmode),
   ];
   interaction.reply({
     embeds,
@@ -261,7 +312,10 @@ function invalidPir(pairName: string): APIEmbed {
   };
 }
 
-function createPairEmbedding(pairName: string): APIEmbed {
+function createPairEmbedding(
+  pairName: string,
+  estimationmode: "min" | "max"
+): APIEmbed {
   const symbols = pairName
     .toLowerCase()
     .trim()
@@ -287,11 +341,11 @@ function createPairEmbedding(pairName: string): APIEmbed {
     // Trim down to limit the message size
     .slice(0, 10)
     // Generate the messages
-    .map((opty) => singleOpportunityMessage(opty));
+    .map((opty) => singleOpportunityMessage(opty, estimationmode));
 
   // Add the heading and combine the message array into a string
   const blueChip = isBlueChip(pairs[0]);
-  addHeading(messages, blueChip);
+  addHeading(messages, blueChip, estimationmode);
   const description = messages.join("\n\n");
 
   // Build the API embedding
@@ -313,13 +367,24 @@ function sendPairOpportunities(interaction: ChatInputCommandInteraction) {
   if (!pairName) {
     return interaction.reply("pairname parameter required");
   }
-  const embeds = [createPairEmbedding(pairName.value as string)];
+
+  const estimationmode = getEstimationMode(interaction);
+
+  if (estimationmode == "") {
+    return;
+  }
+  const embeds = [
+    createPairEmbedding(pairName.value as string, estimationmode),
+  ];
   interaction.reply({
     embeds,
   });
 }
 
-function createTokenEmbedding(token: string): APIEmbed {
+function createTokenEmbedding(
+  token: string,
+  estimationmode: "min" | "max"
+): APIEmbed {
   token = token.trim();
   const pairs = DLMM_OPPORTUNITY_DATA.data.filter(
     (opty) =>
@@ -341,11 +406,11 @@ function createTokenEmbedding(token: string): APIEmbed {
     // Trim down to limit the message size
     .slice(0, 10)
     // Generate the messages
-    .map((opty) => singleOpportunityMessage(opty));
+    .map((opty) => singleOpportunityMessage(opty, estimationmode));
 
   // Add the heading and combine the message array into a string
   const blueChip = isBlueChip(pairs[0]);
-  addHeading(messages, blueChip);
+  addHeading(messages, blueChip, estimationmode);
   const description = messages.join("\n\n");
 
   // Build the API embedding
@@ -367,7 +432,11 @@ function sendTokenOpportunities(interaction: ChatInputCommandInteraction) {
   if (!token) {
     return interaction.reply("token parameter required");
   }
-  const embeds = [createTokenEmbedding(token.value as string)];
+  const estimationmode = getEstimationMode(interaction);
+  if (estimationmode == "") {
+    return;
+  }
+  const embeds = [createTokenEmbedding(token.value as string, estimationmode)];
   interaction.reply({
     embeds,
   });
@@ -517,11 +586,19 @@ async function registerCommands() {
           type: ApplicationCommandOptionType.Number,
           required: false,
         },
+        {
+          name: "estimationmode",
+          description:
+            "Valid values are min or max.  Default is min for more conservative estimates.",
+          type: ApplicationCommandOptionType.String,
+          required: false,
+        },
       ],
     },
     fn: (interaction) => sendOpportunities(interaction, false),
     helpText:
-      "Get a list of DLMM opportunities for tokens not on the strict list",
+      "Get a list of DLMM opportunities for tokens not on the strict list.  Use the *minliquidity* parameter to specify the minimum liquidity, default is 600.  Use *estimationmode* to specify whether to use the min or max estimated 24H fees.  Default is min.",
+    parameters: ["minliquity", "estimationmode"],
   });
   await registerCommand({
     commandData: {
@@ -535,10 +612,19 @@ async function registerCommands() {
           type: ApplicationCommandOptionType.Number,
           required: false,
         },
+        {
+          name: "estimationmode",
+          description:
+            "Valid values are min or max.  Default is min for more conservative estimates.",
+          type: ApplicationCommandOptionType.String,
+          required: false,
+        },
       ],
     },
     fn: (interaction) => sendOpportunities(interaction, true),
-    helpText: "Get a list of DLMM opportunities for tokens on the strict list",
+    helpText:
+      "Get a list of DLMM opportunities for tokens on the strict list.  Use the *minliquidity* parameter to specify the minimum liquidity, default is 600.  Use *estimationmode* to specify whether to use the min or max estimated 24H fees.  Default is min.",
+    parameters: ["minliquity", "estimationmode"],
   });
   await registerCommand({
     commandData: {
@@ -551,10 +637,19 @@ async function registerCommands() {
           type: ApplicationCommandOptionType.Number,
           required: false,
         },
+        {
+          name: "estimationmode",
+          description:
+            "Valid values are min or max.  Default is min for more conservative estimates.",
+          type: ApplicationCommandOptionType.String,
+          required: false,
+        },
       ],
     },
     fn: (interaction) => sendOpportunities(interaction, true, true),
-    helpText: 'Get a list of DLMM opportunities for "blue chip" tokens',
+    helpText:
+      'Get a list of DLMM opportunities for "blue chip" tokens.  Use the *minliquidity* parameter to specify the minimum liquidity, default is 600.  Use *estimationmode* to specify whether to use the min or max estimated 24H fees.  Default is min.',
+    parameters: ["minliquity", "estimationmode"],
   });
   await registerCommand({
     commandData: {
@@ -568,12 +663,19 @@ async function registerCommands() {
           type: ApplicationCommandOptionType.String,
           required: true,
         },
+        {
+          name: "estimationmode",
+          description:
+            "Valid values are min or max.  Default is min for more conservative estimates.",
+          type: ApplicationCommandOptionType.String,
+          required: false,
+        },
       ],
     },
     fn: (interaction) => sendPairOpportunities(interaction),
     helpText:
-      "Get a list of DLMM opportunities for a specific pair.  Parameter *pairname* should be in the format TOKEN1-TOKEN2",
-    parameters: ["pairname"],
+      "Get a list of DLMM opportunities for a specific pair.  Parameter *pairname* should be in the format TOKEN1-TOKEN2.  Use *estimationmode* to specify whether to use the min or max estimated 24H fees.  Default is min.",
+    parameters: ["pairname", "estimationmode"],
   });
   await registerCommand({
     commandData: {
@@ -587,11 +689,19 @@ async function registerCommands() {
           type: ApplicationCommandOptionType.String,
           required: true,
         },
+        {
+          name: "estimationmode",
+          description:
+            "Valid values are min or max.  Default is min for more conservative estimates.",
+          type: ApplicationCommandOptionType.String,
+          required: false,
+        },
       ],
     },
     fn: (interaction) => sendTokenOpportunities(interaction),
-    helpText: "Get a list of DLMM opportunities for a specific token.",
-    parameters: ["token"],
+    helpText:
+      "Get a list of DLMM opportunities for a specific token.  Use the *token* parameter to specify the token.  Use *estimationmode* to specify whether to use the min or max estimated 24H fees.  Default is min.",
+    parameters: ["token", "estimationmode"],
   });
   await registerCommand({
     commandData: {
