@@ -57,9 +57,12 @@ channel on the [Meteora Discord Server](https://discord.com/invite/meteora).
   - Required _token_ parameter
   - Optional _estimationmode_ indicates whether to use the `min` or `max`
     estimated fees. Default is `min`.
-- **`/all`_`type`_**: Get a list of all market making opportunities across all
+- **`/all` _`type`_**: Get a list of all market making opportunities across all
   of Solana.
   - Required _type_ parameter must be `degen`, `strict`, or `bluechip`.
+- **`/profit` _`txid`_**: Get the profit for a Meteora DLMM position.
+  - Required _txid_ can be any transaction associated with the position (add,
+    remove, fee claim, etc.).
 
 ## Installing the Bot on Your Own Discord Server
 

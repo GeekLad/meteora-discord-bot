@@ -14,13 +14,23 @@ import {
   type OpportunityData,
 } from "./opportunity-finder";
 import type { DexScreenerToken } from "./dex-screener";
-import { BLUE_CHIPS, DUNE_QUERY_ID, REFRESHING_MESSAGE } from "./config";
+import {
+  BLUE_CHIPS,
+  DUNE_QUERY_ID,
+  METEORA_PROGRAM_ID,
+  REFRESHING_MESSAGE,
+} from "./config";
 import { getJupiterTokenList } from "./jupiter-token-list";
 import {
   getAllSolanaOpportunities,
   refreshAllSolanaOpportunities,
 } from "./dune";
 import { DuneClient } from "@duneanalytics/client-sdk";
+import { Connection } from "@solana/web3.js";
+import { type Idl } from "@project-serum/anchor";
+import { IDL } from "@meteora-ag/dlmm";
+import { SolanaParser } from "@debridge-finance/solana-transaction-parser";
+import { getPositionTransactionTotalsFromSignature } from "./meteora-transactions";
 
 interface MeteoraBotOpportunityData {
   updated: number;
@@ -51,6 +61,9 @@ if (!process.env.DISCORD_BOT_TOKEN) {
 if (!process.env.DUNE_API_KEY) {
   environmentErrors.push("DUNE_API_KEY environment variable missing.");
 }
+if (!process.env.SOLANA_RPC) {
+  environmentErrors.push("SOLANA_RPC environment variable missing.");
+}
 if (environmentErrors.length > 0) {
   throw new Error(
     "Unable to start bot, environment not configured properly.\n" +
@@ -80,6 +93,12 @@ let DLMM_OPPORTUNITY_DATA: MeteoraBotOpportunityData = {
 };
 const ENABLE_DUNE_REFRESH = Boolean(process.env.ENABLE_DUNE_REFRESH);
 let SOLANA_OPPORTUNITY_DATA: AllSolanaOpportunitesEnriched[] = [];
+
+// Set up the RPC and transaction parser
+const CONNECTION = new Connection(process.env.SOLANA_RPC!);
+const PARSER = new SolanaParser([
+  { idl: IDL as Idl, programId: METEORA_PROGRAM_ID },
+]);
 
 async function refreshDlmmOpportunities() {
   console.log(`${new Date().toLocaleTimeString()}: Refreshing DLMM data`);
@@ -624,6 +643,86 @@ function sendAllOpportunities(interaction: ChatInputCommandInteraction) {
   });
 }
 
+function invalidTransaction(
+  interaction: ChatInputCommandInteraction,
+  txid: string
+) {
+  interaction.editReply({
+    embeds: [
+      {
+        title: "No Position Found",
+        description: `No positions found for transaction ${txid}`,
+      },
+    ],
+  });
+}
+
+async function sendProfit(interaction: ChatInputCommandInteraction) {
+  interaction.deferReply({ ephemeral: true });
+  const txid = interaction.options.get("txid")!.value as string;
+  try {
+    const profit = await getPositionTransactionTotalsFromSignature(
+      CONNECTION,
+      PARSER,
+      txid
+    );
+    if (!profit) {
+      invalidTransaction(interaction, txid);
+    }
+    const depositsUsd = profit!.depositsUsd.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    const feesUsd = profit!.feesUsd.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    const rewardsUsd = profit!.rewardsUsd.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    const withdrawalsUsd = profit!.withdrawalsUsd.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    const profitUsd = (
+      profit!.withdrawalsUsd +
+      profit!.feesUsd +
+      profit!.rewardsUsd -
+      profit!.depositsUsd
+    ).toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    interaction.editReply({
+      embeds: [
+        {
+          title: `Position Profit`,
+          description: `Position ID: [${
+            profit!.positionId
+          }](https://solscan.io/account/${
+            profit!.positionId
+          })\n\nDeposits: ${depositsUsd}\n\n${
+            profit!.rewardsUsd > 0 ? `Rewards: ${rewardsUsd}\n` : ""
+          }Fees: ${feesUsd}\nWithdrawals: ${withdrawalsUsd}\n\n**Profit: ${profitUsd}**`,
+        },
+      ],
+    });
+  } catch (err) {
+    invalidTransaction(interaction, txid);
+  }
+}
+
 // Map & helper function for command registration
 const COMMANDS = new Map<string, MeteoraBotCommand>();
 async function registerCommand(meteoraBotCommand: MeteoraBotCommand) {
@@ -834,6 +933,24 @@ async function registerCommands() {
     helpText:
       "Get a list of all market making opportunities across all of Solana.  type must be degen, strict, or bluechip",
     parameters: ["type"],
+  });
+  await registerCommand({
+    commandData: {
+      name: "profit",
+      description: "Get the USD profit for a position",
+      options: [
+        {
+          name: "txid",
+          description:
+            "The transaction ID to look up.  Can be any transaction associated with a position.",
+          type: ApplicationCommandOptionType.String,
+          required: true,
+        },
+      ],
+    },
+    fn: (interaction) => sendProfit(interaction),
+    helpText: "Get the profitability of a DLMM position.",
+    parameters: ["txid"],
   });
 
   // Set up the command handler

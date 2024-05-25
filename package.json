@@ -9,7 +9,11 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "@debridge-finance/solana-transaction-parser": "^2.0.1",
     "@duneanalytics/client-sdk": "^0.1.5",
+    "@meteora-ag/dlmm": "^1.0.38",
+    "@project-serum/anchor": "^0.26.0",
+    "@solana/web3.js": "^1.91.8",
     "discord.js": "^14.15.2",
     "pm2": "^5.3.1"
   }

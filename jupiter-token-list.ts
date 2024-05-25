@@ -1,4 +1,7 @@
-import { JUPITER_TOKEN_STRICT_LIST_API } from "./config";
+import {
+  JUPITER_TOKEN_ALL_LIST_API,
+  JUPITER_TOKEN_STRICT_LIST_API,
+} from "./config";
 import type { UnifiedFetcher } from "./util";
 
 export interface JupiterTokenListToken {
@@ -27,9 +30,14 @@ export enum JupiterTokenListTag {
 }
 
 export async function getJupiterTokenList(
-  fetcher: UnifiedFetcher = fetch
+  fetcher: UnifiedFetcher = fetch,
+  listType: "strict" | "all" = "strict"
 ): Promise<Map<string, JupiterTokenListToken>> {
-  const response = await fetcher(JUPITER_TOKEN_STRICT_LIST_API);
+  const response = await fetcher(
+    listType == "strict"
+      ? JUPITER_TOKEN_STRICT_LIST_API
+      : JUPITER_TOKEN_ALL_LIST_API
+  );
   const data: JupiterTokenListToken[] = JSON.parse(await response.text());
   const map: Map<string, JupiterTokenListToken> = new Map();
   data.forEach((token) => map.set(token.address, token));

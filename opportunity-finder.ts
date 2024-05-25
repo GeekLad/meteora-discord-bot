@@ -1,4 +1,4 @@
-import { getMeteoraPairs, type MeteoraDlmmPair } from "./meteora";
+import { getMeteoraPairs, type MeteoraDlmmPair } from "./meteora-markets";
 import {
   getDexScreenerPairs,
   type DexScreenerActivityInfo,
