@@ -255,9 +255,19 @@ function createOpportunityEmbedding(
   return {
     title: `Top ${messages.length - 1} ${
       !strict ? "Non-Strict List" : !blueChip ? "Strict List" : "Blue Chip"
-    } DLMM Opportunities\nLast updated <t:${Math.round(
-      DLMM_OPPORTUNITY_DATA.updated
-    )}:R>`,
+    } DLMM Opportunities\nLiquidity: ${minliquidity.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    })} or more\n${
+      minfdv > 0
+        ? `FDV: ${minfdv.toLocaleString("en-US", {
+            style: "currency",
+            currency: "USD",
+            maximumFractionDigits: 0,
+          })} or more`
+        : ""
+    }\nLast updated <t:${Math.round(DLMM_OPPORTUNITY_DATA.updated)}:R>`,
     description,
     color: 3329330,
   };
