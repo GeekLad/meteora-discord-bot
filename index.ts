@@ -149,7 +149,15 @@ function sendHelp(interaction: ChatInputCommandInteraction) {
       }**: ${command.helpText}`
     );
   });
-  interaction.reply(`**Meteora Bot Commands**\n${commands.join("\n")}`);
+  interaction.reply({
+    embeds: [
+      {
+        title: "Meteora Bot Help",
+        description: commands.join("\n\n"),
+        color: 3329330,
+      },
+    ],
+  });
 }
 
 function rugCheck(token: DexScreenerToken): string {
@@ -193,7 +201,8 @@ function singleOpportunityMessage(
         maximumFractionDigits: 0,
       })
     : "";
-  const message = `**[${pairName}](https://app.meteora.ag/dlmm/${pairAddress})** 🖨 ${feestoTvl} 💰 ${liquidity}${
+  const trend = opty.trend == "Up" ? "⬆️" : "⬇️";
+  const message = `**[${pairName}](https://app.meteora.ag/dlmm/${pairAddress})** 🖨 ${feestoTvl} 📈 ${trend} 💰 ${liquidity}${
     fdv != "" ? ` 🌏 ${fdv}` : ""
   } 🪜 ${binStep} 💵 ${baseFee}`;
   const rugChecks = [rugCheck(opty.base), rugCheck(opty.quote)];
@@ -233,7 +242,7 @@ function addHeading(
   messages.unshift(
     `**Pair Name**\n🖨 Estimated ${
       estimationMode == "min" ? "Minimum" : "Maximum"
-    } 24H Fees / TVL\n💰 Market TVL\n🌏 FDV\n🪜 Bin Step\n💵 Base Fee${
+    } 24H Fees / TVL\n📈 Volume Trend\n💰 Market TVL\n🌏 FDV\n🪜 Bin Step\n💵 Base Fee${
       !blueChip ? "\n✅ Rug Check" : ""
     }`
   );
@@ -244,18 +253,20 @@ function createOpportunityEmbedding(
   strict = false,
   blueChip = false,
   estimationmode: "min" | "max" = "min",
-  minfdv = 0
+  minfdv = 0,
+  uptrendonly = false
 ): APIEmbed {
   if (DLMM_OPPORTUNITY_DATA.data.length == 0) {
     return REFRESHING_MESSAGE;
   }
 
-  const messages = DLMM_OPPORTUNITY_DATA.data
+  const opportunities = DLMM_OPPORTUNITY_DATA.data
     // Filters
     .filter(
       (opty) =>
         opty.liquidity > minliquidity &&
         (minfdv == 0 || (minfdv != 0 && opty.fdv && opty.fdv >= minfdv)) &&
+        (!uptrendonly || (uptrendonly && opty.trend == "Up")) &&
         ((!strict && isDegen(opty)) ||
           (strict && !blueChip && isStrict(opty)) ||
           (strict && blueChip && isBlueChip(opty)))
@@ -268,7 +279,17 @@ function createOpportunityEmbedding(
       return b.feeToTvl.max - a.feeToTvl.max;
     })
     // Trim down to limit the message size
-    .slice(0, 10)
+    .slice(0, 10);
+
+  if (opportunities.length == 0) {
+    return {
+      title: `No Results`,
+      color: 3329330,
+      description: `No pairs found matching your parameters`,
+    };
+  }
+
+  const messages = opportunities
     // Generate the messages
     .map((opty) => singleOpportunityMessage(opty, estimationmode));
 
@@ -290,9 +311,11 @@ function createOpportunityEmbedding(
             style: "currency",
             currency: "USD",
             maximumFractionDigits: 0,
-          })} or more`
+          })} or more\n`
         : ""
-    }\nLast updated <t:${Math.round(DLMM_OPPORTUNITY_DATA.updated)}:R>`,
+    }${
+      uptrendonly ? "Up-trending Volume Pairs\n" : ""
+    }Last updated <t:${Math.round(DLMM_OPPORTUNITY_DATA.updated)}:R>`,
     description,
     color: 3329330,
   };
@@ -334,6 +357,9 @@ async function sendOpportunities(
     ? (interaction.options.get("minfdv")!.value as number)
     : 0;
   const estimationmode = getEstimationMode(interaction);
+  const uptrendonly = interaction.options.get("uptrendonly")
+    ? Boolean(interaction.options.get("uptrendonly")?.value)
+    : false;
 
   if (estimationmode == "") {
     return;
@@ -346,7 +372,8 @@ async function sendOpportunities(
       strict,
       blueChip,
       estimationmode,
-      minfdv
+      minfdv,
+      uptrendonly
     ),
   ];
   interaction.reply({
@@ -639,22 +666,28 @@ async function registerCommands() {
         {
           name: "estimationmode",
           description:
-            "Valid values are min or max.  Default is min for more conservative estimates.",
+            "Valid values are min or max.  Default is `min` for more conservative estimates.",
           type: ApplicationCommandOptionType.String,
           required: false,
         },
         {
           name: "minfdv",
-          description: "The minimum fully diluted value.  Default is 0.",
+          description: "The minimum fully diluted value.  Default is `0`.",
           type: ApplicationCommandOptionType.Number,
+          required: false,
+        },
+        {
+          name: "uptrendonly",
+          description: "Only display pairs with up-trending volume.",
+          type: ApplicationCommandOptionType.Boolean,
           required: false,
         },
       ],
     },
     fn: (interaction) => sendOpportunities(interaction, false),
     helpText:
-      "Get a list of DLMM opportunities for tokens not on the strict list.  Use the *minliquidity* parameter to specify the minimum liquidity, default is 600.  Use *estimationmode* to specify whether to use the min or max estimated 24H fees.  Default is min. Use *minfdv* to specify the minimum fully diluted value.  Default is 0.",
-    parameters: ["minliquity", "estimationmode", "minfdv"],
+      "Get a list of DLMM opportunities for tokens not on the strict list.\n- *minliquidity*: the minimum liquidity, default is 600.\n- *estimationmode*: Whether to use the min or max estimated 24H fees.  Default is `min`.\n- *minfdv*: The minimum fully diluted value.  Default is `0`.\n- *uptrendonly*: Only show pairs with an up-trending volume. Default is to display all pairs regardless of volume trend.",
+    parameters: ["minliquity", "estimationmode", "minfdv", "uptrendonly"],
   });
   await registerCommand({
     commandData: {
@@ -671,22 +704,28 @@ async function registerCommands() {
         {
           name: "estimationmode",
           description:
-            "Valid values are min or max.  Default is min for more conservative estimates.",
+            "Valid values are min or max.  Default is `min` for more conservative estimates.",
           type: ApplicationCommandOptionType.String,
           required: false,
         },
         {
           name: "minfdv",
-          description: "The minimum fully diluted value.  Default is 0.",
+          description: "The minimum fully diluted value.  Default is `0`.",
           type: ApplicationCommandOptionType.Number,
+          required: false,
+        },
+        {
+          name: "uptrendonly",
+          description: "Only display pairs with up-trending volume.",
+          type: ApplicationCommandOptionType.Boolean,
           required: false,
         },
       ],
     },
     fn: (interaction) => sendOpportunities(interaction, true),
     helpText:
-      "Get a list of DLMM opportunities for tokens on the strict list.  Use the *minliquidity* parameter to specify the minimum liquidity, default is 600.  Use *estimationmode* to specify whether to use the min or max estimated 24H fees.  Default is min. Use *minfdv* to specify the minimum fully diluted value.  Default is 0.",
-    parameters: ["minliquity", "estimationmode", "minfdv"],
+      "Get a list of DLMM opportunities for tokens on the strict list.\n- *minliquidity*: the minimum liquidity, default is 600.\n- *estimationmode*: Whether to use the min or max estimated 24H fees.  Default is `min`.\n- *minfdv*: The minimum fully diluted value.  Default is `0`.\n- *uptrendonly*: Only show pairs with an up-trending volume. Default is to display all pairs regardless of volume trend.",
+    parameters: ["minliquity", "estimationmode", "minfdv", "uptrendonly"],
   });
   await registerCommand({
     commandData: {
@@ -702,22 +741,28 @@ async function registerCommands() {
         {
           name: "estimationmode",
           description:
-            "Valid values are min or max.  Default is min for more conservative estimates.",
+            "Valid values are min or max.  Default is `min` for more conservative estimates.",
           type: ApplicationCommandOptionType.String,
           required: false,
         },
         {
           name: "minfdv",
-          description: "The minimum fully diluted value.  Default is 0.",
+          description: "The minimum fully diluted value.  Default is `0`.",
           type: ApplicationCommandOptionType.Number,
+          required: false,
+        },
+        {
+          name: "uptrendonly",
+          description: "Only display pairs with up-trending volume.",
+          type: ApplicationCommandOptionType.Boolean,
           required: false,
         },
       ],
     },
     fn: (interaction) => sendOpportunities(interaction, true, true),
     helpText:
-      'Get a list of DLMM opportunities for "blue chip" tokens.  Use the *minliquidity* parameter to specify the minimum liquidity, default is 600.  Use *estimationmode* to specify whether to use the min or max estimated 24H fees.  Default is min. Use *minfdv* to specify the minimum fully diluted value.  Default is 0.',
-    parameters: ["minliquity", "estimationmode", "minfdv"],
+      'Get a list of DLMM opportunities for "blue chip" tokens.\n- *minliquidity*: the minimum liquidity, default is 600.\n- *estimationmode*: Whether to use the min or max estimated 24H fees.  Default is `min`.\n- *minfdv*: The minimum fully diluted value.  Default is `0`.\n- *uptrendonly*: Only show pairs with an up-trending volume. Default is to display all pairs regardless of volume trend.',
+    parameters: ["minliquity", "estimationmode", "minfdv", "uptrendonly"],
   });
   await registerCommand({
     commandData: {
@@ -734,7 +779,7 @@ async function registerCommands() {
         {
           name: "estimationmode",
           description:
-            "Valid values are min or max.  Default is min for more conservative estimates.",
+            "Valid values are min or max.  Default is `min` for more conservative estimates.",
           type: ApplicationCommandOptionType.String,
           required: false,
         },
@@ -742,7 +787,7 @@ async function registerCommands() {
     },
     fn: (interaction) => sendPairOpportunities(interaction),
     helpText:
-      "Get a list of DLMM opportunities for a specific pair.  Parameter *pairname* should be in the format TOKEN1-TOKEN2.  Use *estimationmode* to specify whether to use the min or max estimated 24H fees.",
+      "Get a list of DLMM opportunities for a specific pair.\n- *pairname*: The pair for the markets you want to see.  Should be in the format TOKEN1-TOKEN2.\n- *estimationmode*: Whether to use the min or max estimated 24H fees.",
     parameters: ["pairname", "estimationmode"],
   });
   await registerCommand({
@@ -760,7 +805,7 @@ async function registerCommands() {
         {
           name: "estimationmode",
           description:
-            "Valid values are min or max.  Default is min for more conservative estimates.",
+            "Valid values are min or max.  Default is `min` for more conservative estimates.",
           type: ApplicationCommandOptionType.String,
           required: false,
         },
@@ -768,7 +813,7 @@ async function registerCommands() {
     },
     fn: (interaction) => sendTokenOpportunities(interaction),
     helpText:
-      "Get a list of DLMM opportunities for a specific token.  Use the *token* parameter to specify the token.  Use *estimationmode* to specify whether to use the min or max estimated 24H fees.  Default is min.",
+      "Get a list of DLMM opportunities for a specific token.\n- *token*: The token for pairs you want to see.\n- *estimationmode*: Whether to use the min or max estimated 24H fees.  Default is `min`.",
     parameters: ["token", "estimationmode"],
   });
   await registerCommand({

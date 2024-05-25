@@ -17,30 +17,36 @@ channel on the [Meteora Discord Server](https://discord.com/invite/meteora).
 ## Bot Commands
 
 - **`/help`**: Display this info again
-- **`/degen` _`minliquidity`_ _`estimationmode`_ _`minfdv`_**: Get a list of DLMM
-  opportunities for tokens not on the strict list.
+- **`/degen` _`minliquidity`_ _`estimationmode`_ _`minfdv`_ _`uptrendonly`_**:
+  Get a list of DLMM opportunities for tokens not on the strict list.
   - Optional _minliquidity_ parameter for the minimum liquidity. Default is
     `600`.
   - Optional _estimationmode_ indicates whether to use the `min` or `max`
     estimated fees. Default is `min`.
   - Optional _minfdv_ parameter for the minimum fully diluted value. Default is
     `0`.
-- **`/strict` _`minliquidity`_ _`estimationmode`_ _`minfdv`_**: Get a list of DLMM
-  opportunities for tokens on the strict list.
+  - Optional _uptrendonly_ parameter to only display pairs with up trending
+    volume. Default is `False` (i.e. display all pairs regardless of trend).
+- **`/strict` _`minliquidity`_ _`estimationmode`_ _`minfdv`_ _`uptrendonly`_**:
+  Get a list of DLMM opportunities for tokens on the strict list.
   - Optional _minliquidity_ parameter for the minimum liquidity. Default is
     `600`.
   - Optional _estimationmode_ indicates whether to use the `min` or `max`
     estimated fees. Default is `min`.
   - Optional _minfdv_ parameter for the minimum fully diluted value. Default is
     `0`.
-- **`/bluechip` _`minliquidity`_ _`estimationmode`_ _`minfdv`_**: Get a list of
-  DLMM opportunities for "blue chip" tokens.
+  - Optional _uptrendonly_ parameter to only display pairs with up trending
+    volume. Default is `False` (i.e. display all pairs regardless of trend).
+- **`/bluechip` _`minliquidity`_ _`estimationmode`_ _`minfdv`_ _`uptrendonly`_**:
+  Get a list of DLMM opportunities for "blue chip" tokens.
   - Optional _minliquidity_ parameter for the minimum liquidity. Default is
     `600`.
   - Optional _estimationmode_ indicates whether to use the `min` or `max`
     estimated fees. Default is `min`.
   - Optional _minfdv_ parameter for the minimum fully diluted value. Default is
     `0`.
+  - Optional _uptrendonly_ parameter to only display pairs with up trending
+    volume. Default is `False` (i.e. display all pairs regardless of trend).
 - **`/pair` _`pairname`_ _`estimationmode`_**: Get a list of DLMM opportunities
   for a specific pair.
   - Required _pairname_ parameter should be in the format `TOKEN1-TOKEN2`.
