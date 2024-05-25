@@ -34,6 +34,14 @@ interface MeteoraBotCommand {
   helpText: string;
 }
 
+// Set up stats tracking
+const DISCORD_BOT_STATS = {
+  startTime: new Date().getTime(),
+  interactions: 0,
+  refreshCount: 0,
+  duneRefreshCount: 0,
+};
+
 // Verify the required environment variables
 const environmentErrors: string[] = [];
 
@@ -82,6 +90,12 @@ async function refreshDlmmOpportunities() {
       updated: new Date().getTime() / 1000,
       data,
     };
+    DISCORD_BOT_STATS.refreshCount++;
+    console.log(
+      `${new Date().toLocaleTimeString()}: Data refreshed ${
+        DISCORD_BOT_STATS.refreshCount
+      } times`
+    );
   } catch (err) {
     console.error(err);
     console.error(
@@ -96,6 +110,7 @@ async function refreshDlmmOpportunities() {
 }
 
 async function refreshAll() {
+  console.log(`${new Date().toLocaleTimeString()}: Refreshing Dune data`);
   if (ENABLE_DUNE_REFRESH) {
     await refreshAllSolanaOpportunities(DUNE_CLIENT);
   }
@@ -107,6 +122,12 @@ async function refreshAll() {
     const enrichedData = data as AllSolanaOpportunitesEnriched[];
     addStrictFlagToAllSolanaOpportunities(tokenMap, enrichedData);
     SOLANA_OPPORTUNITY_DATA = enrichedData;
+    DISCORD_BOT_STATS.duneRefreshCount++;
+    console.log(
+      `${new Date().toLocaleTimeString()}: Dune data refreshed ${
+        DISCORD_BOT_STATS.duneRefreshCount
+      } times`
+    );
   } else {
     SOLANA_OPPORTUNITY_DATA = [];
     console.error(
@@ -165,12 +186,16 @@ function singleOpportunityMessage(
     style: "percent",
     maximumFractionDigits: 2,
   });
-  const fdv = opty.fdv.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
-  const message = `**[${pairName}](https://app.meteora.ag/dlmm/${pairAddress})** 🖨 ${feestoTvl} 💰 ${liquidity} 🌏 ${fdv} 🪜 ${binStep} 💵 ${baseFee}`;
+  const fdv = opty.fdv
+    ? opty.fdv.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0,
+      })
+    : "";
+  const message = `**[${pairName}](https://app.meteora.ag/dlmm/${pairAddress})** 🖨 ${feestoTvl} 💰 ${liquidity}${
+    fdv != "" ? ` 🌏 ${fdv}` : ""
+  } 🪜 ${binStep} 💵 ${baseFee}`;
   const rugChecks = [rugCheck(opty.base), rugCheck(opty.quote)];
   if (rugChecks[0] != "" && rugChecks[1] != "") {
     return message + " ✅ " + rugChecks.join(", ");
@@ -770,6 +795,14 @@ async function registerCommands() {
   DISCORD_CLIENT.on("interactionCreate", async (interaction: Interaction) => {
     if (interaction instanceof ChatInputCommandInteraction) {
       const command = COMMANDS.get(interaction.commandName);
+      DISCORD_BOT_STATS.interactions++;
+      console.log(
+        `${new Date().toLocaleTimeString()}: Received ${
+          interaction.command?.name
+        } request from ${interaction.user.displayName} in ${
+          interaction.guild?.name
+        }, total interactions: ${DISCORD_BOT_STATS.interactions}`
+      );
       command?.fn(interaction);
     }
   });
