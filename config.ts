@@ -5,7 +5,6 @@ export const DEX_SCRENER_API_URL =
   "https://api.dexscreener.com/latest/dex/pairs/solana";
 export const JUPITER_TOKEN_STRICT_LIST_API = "https://token.jup.ag/strict";
 export const JUPITER_TOKEN_ALL_LIST_API = "https://token.jup.ag/all";
-export const MAX_URL_LENGTH = 1000;
 export const BLUE_CHIPS = [
   "USDC",
   "SOL",

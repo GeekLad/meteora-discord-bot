@@ -1,4 +1,4 @@
-import { DEX_SCRENER_API_URL, MAX_URL_LENGTH } from "./config";
+import { DEX_SCRENER_API_URL } from "./config";
 import { multiFetch, type UnifiedMultiFetcher } from "./util";
 
 export interface DexScreenerApiData {
@@ -79,16 +79,15 @@ function addressesToDexScreenerUrls(addresses: string[]): string[] {
   addresses.forEach((address) => {
     const curentUrlIndex = fetchUrls.length - 1;
     addressCount++;
-    const urlLength = fetchUrls[curentUrlIndex].length;
     if (fetchUrls[curentUrlIndex].length == DEX_SCRENER_API_URL.length) {
       fetchUrls[curentUrlIndex] = `${fetchUrls[curentUrlIndex]}/${address}`;
     } else {
       const updatedUrl = `${fetchUrls[curentUrlIndex]},${address}`;
-      if (updatedUrl.length < MAX_URL_LENGTH && addressCount <= 30) {
+      if (addressCount < 30) {
         fetchUrls[curentUrlIndex] = updatedUrl;
-        addressCount = 1;
       } else {
         fetchUrls.push(`${DEX_SCRENER_API_URL}/${address}`);
+        addressCount = 0;
       }
     }
   });

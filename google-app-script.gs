@@ -1,8 +1,9 @@
 // config.ts
-var METEORA_API_URL = "https://dlmm-api.meteora.ag/pair/all";
+var METEORA_API = "https://dlmm-api.meteora.ag";
+var METEORA_API_PAIR_ENDPOINT = "/pair/all";
 var DEX_SCRENER_API_URL = "https://api.dexscreener.com/latest/dex/pairs/solana";
 var JUPITER_TOKEN_STRICT_LIST_API = "https://token.jup.ag/strict";
-var MAX_URL_LENGTH = 1000;
+var JUPITER_TOKEN_ALL_LIST_API = "https://token.jup.ag/all";
 var BLUE_CHIPS = [
   "USDC",
   "SOL",
@@ -22,8 +23,8 @@ var BLUE_CHIPS = [
 ].map((token) => token.toLowerCase());
 
 // jupiter-token-list.ts
-async function getJupiterTokenList_(fetcher = fetch) {
-  const response = await fetcher(JUPITER_TOKEN_STRICT_LIST_API);
+async function getJupiterTokenList_(fetcher = fetch, listType = "strict") {
+  const response = await fetcher(listType == "strict" ? JUPITER_TOKEN_STRICT_LIST_API : JUPITER_TOKEN_ALL_LIST_API);
   const data = JSON.parse(await response.text());
   const map = new Map;
   data.forEach((token) => map.set(token.address, token));
@@ -39,9 +40,9 @@ var JupiterTokenListTag;
   JupiterTokenListTag2["Wormhole"] = "wormhole";
 })(JupiterTokenListTag || (JupiterTokenListTag = {}));
 
-// meteora.ts
+// meteora-markets.ts
 async function getMeteoraPairs_(fetcher = fetch) {
-  const response = await fetcher(METEORA_API_URL);
+  const response = await fetcher(METEORA_API + METEORA_API_PAIR_ENDPOINT);
   const responseText = await response.text();
   const pairs = JSON.parse(responseText);
   return pairs;
@@ -59,16 +60,15 @@ var addressesToDexScreenerUrls_ = function(addresses) {
   addresses.forEach((address) => {
     const curentUrlIndex = fetchUrls.length - 1;
     addressCount++;
-    const urlLength = fetchUrls[curentUrlIndex].length;
     if (fetchUrls[curentUrlIndex].length == DEX_SCRENER_API_URL.length) {
       fetchUrls[curentUrlIndex] = `${fetchUrls[curentUrlIndex]}/${address}`;
     } else {
       const updatedUrl = `${fetchUrls[curentUrlIndex]},${address}`;
-      if (updatedUrl.length < MAX_URL_LENGTH && addressCount <= 30) {
+      if (addressCount < 30) {
         fetchUrls[curentUrlIndex] = updatedUrl;
-        addressCount = 1;
       } else {
         fetchUrls.push(`${DEX_SCRENER_API_URL}/${address}`);
+        addressCount = 0;
       }
     }
   });
