@@ -43,3 +43,10 @@ export async function getJupiterTokenList(
   data.forEach((token) => map.set(token.address, token));
   return map;
 }
+
+export function lamportsToDecimal(
+  token: JupiterTokenListToken,
+  lamports: number
+): number {
+  return lamports / 10 ** token.decimals;
+}

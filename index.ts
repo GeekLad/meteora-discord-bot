@@ -30,7 +30,7 @@ import { Connection } from "@solana/web3.js";
 import { type Idl } from "@project-serum/anchor";
 import { IDL } from "@meteora-ag/dlmm";
 import { SolanaParser } from "@debridge-finance/solana-transaction-parser";
-import { getPositionTransactionTotalsFromSignature } from "./meteora-transactions";
+import { getTotalProfitDataFromSignature } from "./meteora-transactions";
 
 interface MeteoraBotOpportunityData {
   updated: number;
@@ -658,63 +658,84 @@ function invalidTransaction(
 }
 
 async function sendProfit(interaction: ChatInputCommandInteraction) {
-  interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ ephemeral: true });
   const txid = interaction.options.get("txid")!.value as string;
   try {
-    const profit = await getPositionTransactionTotalsFromSignature(
+    const profit = await getTotalProfitDataFromSignature(
       CONNECTION,
       PARSER,
       txid
     );
     if (!profit) {
-      invalidTransaction(interaction, txid);
+      return invalidTransaction(interaction, txid);
     }
-    const depositsUsd = profit!.depositsUsd.toLocaleString("en-US", {
+    const depositsUsd = profit.depositsUsd.toLocaleString("en-US", {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-    const feesUsd = profit!.feesUsd.toLocaleString("en-US", {
+    const currentValueUsd = profit.currentValueUsd
+      ? profit.currentValueUsd.toLocaleString("en-US", {
+          style: "currency",
+          currency: "USD",
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      : false;
+    const unclaimedFeesUsd = profit.currentValueUsd
+      ? profit.unclaimedFeesUsd.toLocaleString("en-US", {
+          style: "currency",
+          currency: "USD",
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      : false;
+    const claimedFeesUsd = profit.claimedFeesUsd.toLocaleString("en-US", {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-    const rewardsUsd = profit!.rewardsUsd.toLocaleString("en-US", {
+    const rewardsUsd = profit.rewardsUsd.toLocaleString("en-US", {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-    const withdrawalsUsd = profit!.withdrawalsUsd.toLocaleString("en-US", {
+    const withdrawalsUsd = profit.withdrawalsUsd.toLocaleString("en-US", {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-    const profitUsd = (
-      profit!.withdrawalsUsd +
-      profit!.feesUsd +
-      profit!.rewardsUsd -
-      profit!.depositsUsd
-    ).toLocaleString("en-US", {
+    const profitUsd = profit.profitUsd.toLocaleString("en-US", {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    const profitPercent = profit.profitPercent.toLocaleString("en-US", {
+      style: "percent",
       maximumFractionDigits: 2,
     });
     interaction.editReply({
       embeds: [
         {
           title: `Position Profit`,
-          description: `Position ID: [${
-            profit!.positionId
+          description: `**Position Address**: [${
+            profit.positionAddress
           }](https://solscan.io/account/${
-            profit!.positionId
-          })\n\nDeposits: ${depositsUsd}\n\n${
-            profit!.rewardsUsd > 0 ? `Rewards: ${rewardsUsd}\n` : ""
-          }Fees: ${feesUsd}\nWithdrawals: ${withdrawalsUsd}\n\n**Profit: ${profitUsd}**`,
+            profit.positionAddress
+          })\n\n**Deposits**: ${depositsUsd}\n\n${
+            profit.rewardsUsd > 0
+              ? `${rewardsUsd != "$0.00" ? `**Rewards**: ${rewardsUsd}\n` : ""}`
+              : ""
+          }**Withdrawals**: ${withdrawalsUsd}\n**Claimed Fees**: ${claimedFeesUsd}\n${
+            currentValueUsd
+              ? `**Current Position Value**: ${currentValueUsd}\n**Unclaimed Fees**: ${unclaimedFeesUsd}\n`
+              : "\n"
+          }\n**Profit: ${profitUsd}\nProfit Percent: ${profitPercent}**`,
         },
       ],
     });
