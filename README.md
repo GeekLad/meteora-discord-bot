@@ -60,9 +60,12 @@ channel on the [Meteora Discord Server](https://discord.com/invite/meteora).
 - **`/all` _`type`_**: Get a list of all market making opportunities across all
   of Solana.
   - Required _type_ parameter must be `degen`, `strict`, or `bluechip`.
-- **`/profit` _`txid`_**: Get the profit for a Meteora DLMM position.
+- **`/profit` _`txid`_ _`excludefromleaderboard`_**: Get the profit for a Meteora DLMM position.
   - Required _txid_ can be any transaction associated with the position (add,
     remove, fee claim, etc.).
+  - Optional _excludefromleaderboard_ will prevent a profit transaction from
+    being submitted to the position leaderboard.
+- **`/leaderboard`**: Display the position leaderboard.
 
 ## Installing the Bot on Your Own Discord Server
 

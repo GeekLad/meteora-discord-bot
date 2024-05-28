@@ -3,6 +3,7 @@ import {
   ChatInputCommandInteraction,
   Client,
   IntentsBitField,
+  User,
   type APIEmbed,
   type ApplicationCommandDataResolvable,
   type Interaction,
@@ -31,6 +32,13 @@ import { type Idl } from "@project-serum/anchor";
 import { IDL } from "@meteora-ag/dlmm";
 import { SolanaParser } from "@debridge-finance/solana-transaction-parser";
 import { getTotalProfitDataFromSignature } from "./meteora-transactions";
+import {
+  addPositionProfitData,
+  leaderboardQuery,
+  loadPairs,
+  loadTokens,
+  type LeaderboardData,
+} from "./leaderboard";
 
 interface MeteoraBotOpportunityData {
   updated: number;
@@ -99,6 +107,10 @@ const CONNECTION = new Connection(process.env.SOLANA_RPC!);
 const PARSER = new SolanaParser([
   { idl: IDL as Idl, programId: METEORA_PROGRAM_ID },
 ]);
+
+// Load new tokens & pairs into the database
+await loadTokens();
+await loadPairs();
 
 async function refreshDlmmOpportunities() {
   console.log(`${new Date().toLocaleTimeString()}: Refreshing DLMM data`);
@@ -669,6 +681,14 @@ async function sendProfit(interaction: ChatInputCommandInteraction) {
     if (!profit) {
       return invalidTransaction(interaction, txid);
     }
+    let addedToLeaderboard = false;
+    if (
+      !profit.currentValueUsd &&
+      !interaction.options.get("excludefromleaderboard")?.value
+    ) {
+      await addPositionProfitData(interaction.user.id, profit);
+      addedToLeaderboard = true;
+    }
     const depositsUsd = profit.depositsUsd.toLocaleString("en-US", {
       style: "currency",
       currency: "USD",
@@ -692,12 +712,6 @@ async function sendProfit(interaction: ChatInputCommandInteraction) {
         })
       : false;
     const claimedFeesUsd = profit.claimedFeesUsd.toLocaleString("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    const rewardsUsd = profit.rewardsUsd.toLocaleString("en-US", {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
@@ -727,21 +741,72 @@ async function sendProfit(interaction: ChatInputCommandInteraction) {
             profit.positionAddress
           }](https://solscan.io/account/${
             profit.positionAddress
-          })\n\n**Deposits**: ${depositsUsd}\n\n${
-            profit.rewardsUsd > 0
-              ? `${rewardsUsd != "$0.00" ? `**Rewards**: ${rewardsUsd}\n` : ""}`
-              : ""
-          }**Withdrawals**: ${withdrawalsUsd}\n**Claimed Fees**: ${claimedFeesUsd}\n${
+          })\n\n**Deposits**: ${depositsUsd}\n\n**Withdrawals**: ${withdrawalsUsd}\n**Claimed Fees**: ${claimedFeesUsd}\n${
             currentValueUsd
               ? `**Current Position Value**: ${currentValueUsd}\n**Unclaimed Fees**: ${unclaimedFeesUsd}\n`
-              : "\n"
-          }\n**Profit: ${profitUsd}\nProfit Percent: ${profitPercent}**`,
+              : ""
+          }\n**Profit: ${profitUsd}\nProfit Percent: ${profitPercent}**\n\n${
+            addedToLeaderboard
+              ? "Your transaction was added to the leaderboard!  Use the `/leaderboard` command to see if your position ranks at the top."
+              : interaction.options.get("excludefromleaderboard")?.value == true
+              ? "Your position was not added to the leaderboard"
+              : "Position is still open, cannot be added to the leaderboard"
+          }`,
+          color: 3329330,
         },
       ],
     });
   } catch (err) {
     invalidTransaction(interaction, txid);
   }
+}
+
+async function getUsers(userIds: string[]): Promise<Map<string, User>> {
+  const uniqueIds = Array.from(new Set(userIds));
+  const users = await Promise.all(
+    uniqueIds.map((id) => DISCORD_CLIENT.users.fetch(id))
+  );
+  const userMap = new Map<string, User>();
+  users.forEach((user) => userMap.set(user.id, user));
+  return userMap;
+}
+
+async function sendLeaderboard(interaction: ChatInputCommandInteraction) {
+  const leaderboardData = leaderboardQuery.all() as LeaderboardData[];
+  const top10Positions = leaderboardData.slice(0, 10);
+  const users = await getUsers(
+    top10Positions.map((position) => position.user_id)
+  );
+  const top10 = top10Positions.map(
+    (leader, rank) =>
+      `**${rank + 1}**: ${users.get(leader.user_id)?.displayName} [${
+        leader.pair_name
+      }](https://app.meteora.ag/dlmm/${
+        leader.pair_address
+      }) Total Deposits: ${leader.deposits.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })} Profit: ${leader.profit.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })} Profit %: ${leader.profitPercent.toLocaleString("en-US", {
+        style: "percent",
+        maximumFractionDigits: 2,
+      })}`
+  );
+  interaction.reply({
+    embeds: [
+      {
+        title: "Position Profit Leaderboard",
+        description: top10.join("\n"),
+        color: 3329330,
+      },
+    ],
+  });
 }
 
 // Map & helper function for command registration
@@ -967,11 +1032,27 @@ async function registerCommands() {
           type: ApplicationCommandOptionType.String,
           required: true,
         },
+        {
+          name: "excludefromleaderboard",
+          description:
+            "Exclude the position from the leaderboard, if the position is closed.",
+          type: ApplicationCommandOptionType.Boolean,
+          required: false,
+        },
       ],
     },
     fn: (interaction) => sendProfit(interaction),
-    helpText: "Get the profitability of a DLMM position.",
-    parameters: ["txid"],
+    helpText:
+      "Get the profitability of a DLMM position.  To exclude the position from the leaderboard, set the excludefromleaderboard flag to `True`.",
+    parameters: ["txid", "excludefromleaderboard"],
+  });
+  await registerCommand({
+    commandData: {
+      name: "leaderboard",
+      description: "View the profit leaderboard",
+    },
+    fn: (interaction) => sendLeaderboard(interaction),
+    helpText: "View the profit leaderboard.",
   });
 
   // Set up the command handler

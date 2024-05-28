@@ -39,22 +39,25 @@ interface MeteoraTransactionData {
   onchain_timestamp: number;
 }
 
-interface MeteoraTotalProfitData {
+export interface MeteoraTotalProfitData {
   ownerAddress: string;
   positionAddress: string;
-  positionIsOpen: boolean;
+  pairAddress: string;
+  mintX: string;
+  mintY: string;
   depositsUsd: number;
   currentValueUsd?: number;
   withdrawalsUsd: number;
   claimedFeesUsd: number;
   unclaimedFeesUsd: number;
-  rewardsUsd: number;
   profitUsd: number;
   profitPercent: number;
 }
 
 interface MeteoraUnrealizedProfitData {
   positionAddresses: MeteoraPositionAddresses;
+  mintX: string;
+  mintY: string;
   currentValueUsd: number;
   unclaimedFeesUsd: number;
 }
@@ -62,7 +65,6 @@ interface MeteoraUnrealizedProfitData {
 interface MeteoraRealizedProfitData {
   positionAddresses: MeteoraPositionAddresses;
   feesUsd: number;
-  rewardsUsd: number;
   depositsUsd: number;
   withdrawalsUsd: number;
 }
@@ -84,7 +86,6 @@ export async function getTotalProfitDataFromSignature(
   // Use the realized profit to initialize the total profit data
   const profitUsd =
     realizedProfitData.withdrawalsUsd +
-    realizedProfitData.rewardsUsd +
     realizedProfitData.feesUsd -
     realizedProfitData.depositsUsd;
   const profitPercent = profitUsd / realizedProfitData.depositsUsd;
@@ -92,13 +93,16 @@ export async function getTotalProfitDataFromSignature(
     ownerAddress: realizedProfitData.positionAddresses.ownerAddress.toBase58(),
     positionAddress:
       realizedProfitData.positionAddresses.positionAddress.toBase58(),
-    positionIsOpen: false,
+    pairAddress: realizedProfitData.positionAddresses.poolAddress.toBase58(),
+    // The mints need to come from the unrealized profit data, these are just
+    // placeholders to keep TypeScript happy
+    mintX: "",
+    mintY: "",
     currentValueUsd: 0,
     depositsUsd: realizedProfitData.depositsUsd,
     withdrawalsUsd: realizedProfitData.withdrawalsUsd,
     claimedFeesUsd: realizedProfitData.feesUsd,
     unclaimedFeesUsd: 0,
-    rewardsUsd: realizedProfitData.rewardsUsd,
     profitUsd,
     profitPercent,
   };
@@ -107,14 +111,16 @@ export async function getTotalProfitDataFromSignature(
     connection,
     realizedProfitData.positionAddresses
   );
-  if (!unrealizedProfitData) {
+  // Update the mints
+  totalProfitData.mintX = unrealizedProfitData.mintX;
+  totalProfitData.mintY = unrealizedProfitData.mintY;
+  if (unrealizedProfitData.currentValueUsd == 0) {
     return totalProfitData;
   }
 
   // Update the total profit data w/ the unrealized profit data
-  totalProfitData.positionIsOpen = true;
   totalProfitData.currentValueUsd = unrealizedProfitData.currentValueUsd;
-  totalProfitData.unclaimedFeesUsd += unrealizedProfitData.unclaimedFeesUsd;
+  totalProfitData.unclaimedFeesUsd = unrealizedProfitData.unclaimedFeesUsd;
   totalProfitData.profitUsd +=
     unrealizedProfitData.currentValueUsd +
     unrealizedProfitData.unclaimedFeesUsd;
@@ -126,14 +132,23 @@ export async function getTotalProfitDataFromSignature(
 async function getPositionUnrealizedProfitData(
   connection: Connection,
   positionAddresses: MeteoraPositionAddresses
-): Promise<MeteoraUnrealizedProfitData | undefined> {
+): Promise<MeteoraUnrealizedProfitData> {
   // See if we even have any positions
   const dlmmPool = await DLMM.create(connection, positionAddresses.poolAddress);
+  const mintX = dlmmPool.lbPair.tokenXMint.toBase58();
+  const mintY = dlmmPool.lbPair.tokenYMint.toBase58();
+  const noData: MeteoraUnrealizedProfitData = {
+    positionAddresses,
+    mintX,
+    mintY,
+    currentValueUsd: 0,
+    unclaimedFeesUsd: 0,
+  };
   const openPositions = await dlmmPool.getPositionsByUserAndLbPair(
     positionAddresses.ownerAddress
   );
   if (openPositions.userPositions.length == 0) {
-    return undefined;
+    return noData;
   }
 
   // Find the position we're looking for
@@ -143,14 +158,11 @@ async function getPositionUnrealizedProfitData(
       positionAddresses.positionAddress.toBase58()
   );
   if (!lbPosition) {
-    return undefined;
+    return noData;
   }
 
   // Get the token map and prices so we can convert the price data from the
   // lbPosition
-  const mintX = dlmmPool.lbPair.tokenXMint.toBase58();
-  const mintY = dlmmPool.lbPair.tokenYMint.toBase58();
-
   const [tokenMap, prices] = await Promise.all([
     getJupiterTokenList(fetch, "all"),
     getPrices([mintX, mintY]),
@@ -159,7 +171,7 @@ async function getPositionUnrealizedProfitData(
   const tokenX = tokenMap.get(mintX);
   const tokenY = tokenMap.get(mintY);
   if (!tokenX || !tokenY) {
-    return undefined;
+    return noData;
   }
   const xAmount = lamportsToDecimal(
     tokenX,
@@ -175,6 +187,8 @@ async function getPositionUnrealizedProfitData(
   const unclaimedFeesUsd = xFees * priceX.price + yFees * priceY.price;
   return {
     positionAddresses,
+    mintX,
+    mintY,
     currentValueUsd,
     unclaimedFeesUsd,
   };
@@ -254,7 +268,6 @@ async function getPositionRealizedProfit(
   ]);
 
   const feesUsd = positionData.total_fee_usd_claimed;
-  const rewardsUsd = positionData.total_reward_usd_claimed;
   const depositsUsd = depositsData
     .map((deposit) => deposit.token_x_usd_amount + deposit.token_y_usd_amount)
     .reduce((total, current) => total + current);
@@ -267,7 +280,6 @@ async function getPositionRealizedProfit(
   return {
     positionAddresses,
     feesUsd,
-    rewardsUsd,
     depositsUsd,
     withdrawalsUsd,
   };
