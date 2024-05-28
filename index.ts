@@ -683,7 +683,7 @@ async function sendProfit(interaction: ChatInputCommandInteraction) {
     }
     let addedToLeaderboard = false;
     if (
-      !profit.currentValueUsd &&
+      !profit.positionIsOpen &&
       !interaction.options.get("excludefromleaderboard")?.value
     ) {
       await addPositionProfitData(interaction.user.id, profit);
@@ -750,7 +750,7 @@ async function sendProfit(interaction: ChatInputCommandInteraction) {
               ? "Your transaction was added to the leaderboard!  Use the `/leaderboard` command to see if your position ranks at the top."
               : interaction.options.get("excludefromleaderboard")?.value == true
               ? "Your position was not added to the leaderboard"
-              : "Position is still open, cannot be added to the leaderboard"
+              : "Position is still open and cannot be added to the leaderboard"
           }`,
           color: 3329330,
         },

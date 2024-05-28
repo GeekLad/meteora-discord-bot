@@ -43,6 +43,7 @@ export interface MeteoraTotalProfitData {
   ownerAddress: string;
   positionAddress: string;
   pairAddress: string;
+  positionIsOpen: boolean;
   mintX: string;
   mintY: string;
   depositsUsd: number;
@@ -55,6 +56,7 @@ export interface MeteoraTotalProfitData {
 }
 
 interface MeteoraUnrealizedProfitData {
+  positionIsOpen: boolean;
   positionAddresses: MeteoraPositionAddresses;
   mintX: string;
   mintY: string;
@@ -94,6 +96,7 @@ export async function getTotalProfitDataFromSignature(
     positionAddress:
       realizedProfitData.positionAddresses.positionAddress.toBase58(),
     pairAddress: realizedProfitData.positionAddresses.poolAddress.toBase58(),
+    positionIsOpen: false,
     // The mints need to come from the unrealized profit data, these are just
     // placeholders to keep TypeScript happy
     mintX: "",
@@ -114,9 +117,10 @@ export async function getTotalProfitDataFromSignature(
   // Update the mints
   totalProfitData.mintX = unrealizedProfitData.mintX;
   totalProfitData.mintY = unrealizedProfitData.mintY;
-  if (unrealizedProfitData.currentValueUsd == 0) {
+  if (!unrealizedProfitData.positionIsOpen) {
     return totalProfitData;
   }
+  totalProfitData.positionIsOpen = true;
 
   // Update the total profit data w/ the unrealized profit data
   totalProfitData.currentValueUsd = unrealizedProfitData.currentValueUsd;
@@ -138,6 +142,7 @@ async function getPositionUnrealizedProfitData(
   const mintX = dlmmPool.lbPair.tokenXMint.toBase58();
   const mintY = dlmmPool.lbPair.tokenYMint.toBase58();
   const noData: MeteoraUnrealizedProfitData = {
+    positionIsOpen: false,
     positionAddresses,
     mintX,
     mintY,
@@ -186,6 +191,7 @@ async function getPositionUnrealizedProfitData(
   const yFees = lamportsToDecimal(tokenY, lbPosition.positionData.feeY);
   const unclaimedFeesUsd = xFees * priceX.price + yFees * priceY.price;
   return {
+    positionIsOpen: true,
     positionAddresses,
     mintX,
     mintY,
