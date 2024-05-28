@@ -774,6 +774,7 @@ async function getUsers(userIds: string[]): Promise<Map<string, User>> {
 async function sendLeaderboard(interaction: ChatInputCommandInteraction) {
   const leaderboardData = leaderboardQuery.all() as LeaderboardData[];
   const top10Positions = leaderboardData.slice(0, 10);
+  await interaction.deferReply();
   const users = await getUsers(
     top10Positions.map((position) => position.user_id)
   );
@@ -798,7 +799,7 @@ async function sendLeaderboard(interaction: ChatInputCommandInteraction) {
         maximumFractionDigits: 2,
       })}`
   );
-  interaction.reply({
+  interaction.editReply({
     embeds: [
       {
         title: "Position Profit Leaderboard",
