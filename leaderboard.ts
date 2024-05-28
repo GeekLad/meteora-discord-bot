@@ -4,7 +4,6 @@ import { getMeteoraPairs } from "./meteora-markets";
 import { type MeteoraTotalProfitData } from "./meteora-transactions";
 
 export interface LeaderboardData {
-  leaderboard_rank: number;
   user_id: string;
   pair_name: string;
   pair_address: string;
@@ -125,7 +124,6 @@ const loadProfitTransaction = DB.transaction(
 );
 export const leaderboardQuery = DB.query(`
 	SELECT
-		ROW_NUMBER() OVER (ORDER BY (ps.withdrawals + ps.claimed_fees - ps.deposits) / (ps.withdrawals + ps.claimed_fees) DESC) leaderboard_rank,
 		u.id user_id,
 		p.name pair_name,
 		p.id pair_address,
@@ -137,7 +135,7 @@ export const leaderboardQuery = DB.query(`
 		ps.withdrawals,
 		ps.claimed_fees,
 		ps.withdrawals + ps.claimed_fees - ps.deposits profit,
-		(ps.withdrawals + ps.claimed_fees - ps.deposits) / (ps.withdrawals + ps.claimed_fees) profitPercent
+		(ps.withdrawals + ps.claimed_fees - ps.deposits) / ps.deposits profitPercent
 	FROM
 		users u
 		join wallets w on w.user_id = u.id
@@ -148,7 +146,7 @@ export const leaderboardQuery = DB.query(`
 		join tokens x on x.id = tpx.token_id
 		join tokens y on y.id = tpy.token_id
 	ORDER BY 
-		(ps.withdrawals + ps.claimed_fees - ps.deposits) / (ps.withdrawals + ps.claimed_fees) DESC
+		(ps.withdrawals + ps.claimed_fees - ps.deposits) / ps.deposits DESC
 `);
 
 const getTokenQuery = DB.query(`
