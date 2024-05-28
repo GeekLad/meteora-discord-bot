@@ -562,7 +562,7 @@ function singleAllOpportunityMessage(
       currency: "USD",
       maximumFractionDigits: 0,
     }
-  )} 📈 ${opty.volumeToTvl}${
+  )} 📈 ${opty.volumeToTvl} ⚖️ ${opty.price_variation_ratio} ${
     !opty.strict
       ? ` [✅ RugCheck](https://rugcheck.xyz/tokens/${opty.address})`
       : ""
@@ -603,7 +603,7 @@ function createAllOpportunityEmbed(optyType: string): APIEmbed {
   );
 
   messages.unshift(
-    `**Symbol** (address)\n⏱Last Updated\n💰 Volume\n📈 Volume / TVL Ratio\n${
+    `**Symbol** (address)\n⏱Last Updated\n💰 Volume\n📈 Volume / TVL Ratio\n⚖️ Variance Ratio\n${
       optyType == "degen" ? " ✅ Rugcheck\n" : ""
     }`
   );
@@ -650,7 +650,7 @@ function sendAllOpportunities(interaction: ChatInputCommandInteraction) {
 
   const embeds = [createAllOpportunityEmbed(optyType)];
 
-  interaction.reply({
+  interaction.editReply({
     embeds,
   });
 }

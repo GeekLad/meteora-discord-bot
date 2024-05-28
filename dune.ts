@@ -6,6 +6,7 @@ export interface AllSolanaOpportunites {
   symbol: string;
   address: string;
   volume: number;
+  price_variation_ratio: number;
   volumeToTvl: number;
 }
 
@@ -28,6 +29,8 @@ export async function getAllSolanaOpportunities(
           Number(opty.minutes_delayed) * 60 * 1000,
         symbol: String(opty.token),
         address: String(opty.token_address),
+        price_variation_ratio:
+          Math.round(Number(opty.price_variation_ratio) * 10000) / 10000,
         volume: Math.round(Number(opty.estimated_usd_volume)),
         volumeToTvl: Math.round(Number(opty.volume_to_tvl) * 100) / 100,
       };
