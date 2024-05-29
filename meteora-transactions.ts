@@ -277,12 +277,15 @@ async function getPositionRealizedProfit(
   const depositsUsd = depositsData
     .map((deposit) => deposit.token_x_usd_amount + deposit.token_y_usd_amount)
     .reduce((total, current) => total + current);
-  const withdrawalsUsd = withdrawalsData
-    .map(
-      (withdrawal) =>
-        withdrawal.token_x_usd_amount + withdrawal.token_y_usd_amount
-    )
-    .reduce((total, current) => total + current);
+  const withdrawalsUsd =
+    withdrawalsData.length > 0
+      ? withdrawalsData
+          .map(
+            (withdrawal) =>
+              withdrawal.token_x_usd_amount + withdrawal.token_y_usd_amount
+          )
+          .reduce((total, current) => total + current)
+      : 0;
   return {
     positionAddresses,
     feesUsd,
