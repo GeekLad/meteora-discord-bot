@@ -1,5 +1,8 @@
 import { Connection, PublicKey } from "@solana/web3.js";
-import { SolanaParser } from "@debridge-finance/solana-transaction-parser";
+import {
+  SolanaParser,
+  type ParsedAccount,
+} from "@debridge-finance/solana-transaction-parser";
 import { METEORA_API, METEORA_API_POSITION_ENDPOINT } from "./config";
 import { getJupiterTokenList, lamportsToDecimal } from "./jupiter-token-list";
 import DLMM from "@meteora-ag/dlmm";
@@ -41,13 +44,13 @@ interface MeteoraTransactionData {
 
 export interface MeteoraTotalProfitData {
   ownerAddress: string;
-  positionAddress: string;
+  positionAddresses: string[];
   pairAddress: string;
   positionIsOpen: boolean;
   mintX: string;
   mintY: string;
   depositsUsd: number;
-  currentValueUsd?: number;
+  currentValueUsd: number;
   withdrawalsUsd: number;
   claimedFeesUsd: number;
   unclaimedFeesUsd: number;
@@ -71,6 +74,54 @@ interface MeteoraRealizedProfitData {
   withdrawalsUsd: number;
 }
 
+function combineRealizedProfits(
+  realizedProfitData: MeteoraRealizedProfitData[]
+): MeteoraTotalProfitData {
+  const totalProfitData: MeteoraTotalProfitData = {
+    ownerAddress:
+      realizedProfitData[0].positionAddresses.ownerAddress.toBase58(),
+    positionAddresses: realizedProfitData.map((data) =>
+      data.positionAddresses.positionAddress.toBase58()
+    ),
+    pairAddress: realizedProfitData[0].positionAddresses.poolAddress.toBase58(),
+    positionIsOpen: false,
+    // The mints need to come from the unrealized profit data, these are just
+    // placeholders to keep TypeScript happy
+    mintX: "",
+    mintY: "",
+    currentValueUsd: 0,
+    depositsUsd: 0,
+    withdrawalsUsd: 0,
+    claimedFeesUsd: 0,
+    unclaimedFeesUsd: 0,
+    profitUsd: 0,
+    profitPercent: 0,
+  };
+  realizedProfitData.forEach((data) => {
+    totalProfitData.depositsUsd += data.depositsUsd;
+    totalProfitData.withdrawalsUsd += data.withdrawalsUsd;
+    totalProfitData.claimedFeesUsd += data.feesUsd;
+  });
+  totalProfitData.profitUsd =
+    totalProfitData.withdrawalsUsd +
+    totalProfitData.claimedFeesUsd -
+    totalProfitData.depositsUsd;
+  totalProfitData.profitPercent =
+    totalProfitData.profitUsd / totalProfitData.depositsUsd;
+  return totalProfitData;
+}
+
+function combineUnrealizedProfits(
+  unrealizedProfitData: MeteoraUnrealizedProfitData[],
+  totalProfitData: MeteoraTotalProfitData
+) {
+  unrealizedProfitData.forEach((data) => {
+    totalProfitData.currentValueUsd += data.currentValueUsd;
+    totalProfitData.unclaimedFeesUsd += data.unclaimedFeesUsd;
+    totalProfitData.profitUsd += data.currentValueUsd + data.unclaimedFeesUsd;
+  });
+}
+
 export async function getTotalProfitDataFromSignature(
   connection: Connection,
   parser: SolanaParser,
@@ -85,49 +136,28 @@ export async function getTotalProfitDataFromSignature(
     return undefined;
   }
 
-  // Use the realized profit to initialize the total profit data
-  const profitUsd =
-    realizedProfitData.withdrawalsUsd +
-    realizedProfitData.feesUsd -
-    realizedProfitData.depositsUsd;
-  const profitPercent = profitUsd / realizedProfitData.depositsUsd;
-  const totalProfitData: MeteoraTotalProfitData = {
-    ownerAddress: realizedProfitData.positionAddresses.ownerAddress.toBase58(),
-    positionAddress:
-      realizedProfitData.positionAddresses.positionAddress.toBase58(),
-    pairAddress: realizedProfitData.positionAddresses.poolAddress.toBase58(),
-    positionIsOpen: false,
-    // The mints need to come from the unrealized profit data, these are just
-    // placeholders to keep TypeScript happy
-    mintX: "",
-    mintY: "",
-    currentValueUsd: 0,
-    depositsUsd: realizedProfitData.depositsUsd,
-    withdrawalsUsd: realizedProfitData.withdrawalsUsd,
-    claimedFeesUsd: realizedProfitData.feesUsd,
-    unclaimedFeesUsd: 0,
-    profitUsd,
-    profitPercent,
-  };
+  const totalProfitData = combineRealizedProfits(realizedProfitData);
 
-  const unrealizedProfitData = await getPositionUnrealizedProfitData(
-    connection,
-    realizedProfitData.positionAddresses
+  const unrealizedProfitData = await Promise.all(
+    realizedProfitData.map((data) =>
+      getPositionUnrealizedProfitData(connection, data.positionAddresses)
+    )
   );
   // Update the mints
-  totalProfitData.mintX = unrealizedProfitData.mintX;
-  totalProfitData.mintY = unrealizedProfitData.mintY;
-  if (!unrealizedProfitData.positionIsOpen) {
+  totalProfitData.mintX = unrealizedProfitData[0].mintX;
+  totalProfitData.mintY = unrealizedProfitData[0].mintY;
+  if (
+    // If all positions are closed, then go with the unrealized profit data
+    !unrealizedProfitData
+      .map((data) => data.positionIsOpen)
+      .reduce((total, current) => total || current)
+  ) {
     return totalProfitData;
   }
   totalProfitData.positionIsOpen = true;
 
   // Update the total profit data w/ the unrealized profit data
-  totalProfitData.currentValueUsd = unrealizedProfitData.currentValueUsd;
-  totalProfitData.unclaimedFeesUsd = unrealizedProfitData.unclaimedFeesUsd;
-  totalProfitData.profitUsd +=
-    unrealizedProfitData.currentValueUsd +
-    unrealizedProfitData.unclaimedFeesUsd;
+  combineUnrealizedProfits(unrealizedProfitData, totalProfitData);
   totalProfitData.profitPercent =
     totalProfitData.profitUsd / totalProfitData.depositsUsd;
   return totalProfitData;
@@ -204,7 +234,7 @@ async function getPositionRealizedProfitDataFromSignature(
   connection: Connection,
   parser: SolanaParser,
   txSignature: string
-): Promise<MeteoraRealizedProfitData | undefined> {
+): Promise<MeteoraRealizedProfitData[] | undefined> {
   const positionAddresses = await getPositionAddresses(
     connection,
     parser,
@@ -213,14 +243,26 @@ async function getPositionRealizedProfitDataFromSignature(
   if (!positionAddresses) {
     return undefined;
   }
-  return getPositionRealizedProfit(positionAddresses);
+  return Promise.all(
+    positionAddresses.map((positionAddress) =>
+      getPositionRealizedProfit(positionAddress)
+    )
+  );
+}
+
+function uniquePositions(positions: ParsedAccount[]): PublicKey[] {
+  const positionStrings = positions.map((position) =>
+    position.pubkey.toBase58()
+  );
+  const uniqueStrings = Array.from(new Set(positionStrings));
+  return uniqueStrings.map((position) => new PublicKey(position));
 }
 
 async function getPositionAddresses(
   connection: Connection,
   parser: SolanaParser,
   txSignature: string
-): Promise<MeteoraPositionAddresses | undefined> {
+): Promise<MeteoraPositionAddresses[] | undefined> {
   const tx = await parser.parseTransaction(connection, txSignature, false);
   if (tx == undefined) {
     return undefined;
@@ -228,18 +270,20 @@ async function getPositionAddresses(
   const accounts = tx.map((data) => data.accounts).flat();
   const owner = accounts.find((account) => account.name == "sender");
   const pool = accounts.find((account) => account.name == "lbPair");
-  const position = accounts.find((account) => account.name == "position");
+  const position = accounts.filter((account) => account.name == "position");
   if (!owner || !pool || !position) {
     return undefined;
   }
-  const positionAddress = position.pubkey;
+  const positionAddresses = uniquePositions(position);
   const poolAddress = pool.pubkey;
   const ownerAddress = owner.pubkey;
-  return {
-    ownerAddress,
-    poolAddress,
-    positionAddress,
-  };
+  return positionAddresses.map((positionAddress) => {
+    return {
+      ownerAddress,
+      poolAddress,
+      positionAddress,
+    };
+  });
 }
 
 async function getPositionRealizedProfit(

@@ -112,7 +112,7 @@ const loadProfitTransaction = DB.transaction(
       $user_id: userId,
     });
     loadPositionQuery.run({
-      $id: data.positionAddress,
+      $id: data.positionAddresses[0],
       $pair_id: data.pairAddress,
       $wallet_id: data.ownerAddress,
       $deposits: data.depositsUsd,

@@ -684,7 +684,8 @@ async function sendProfit(interaction: ChatInputCommandInteraction) {
     let addedToLeaderboard = false;
     if (
       !profit.positionIsOpen &&
-      !interaction.options.get("excludefromleaderboard")?.value
+      !interaction.options.get("excludefromleaderboard")?.value &&
+      profit.positionAddresses.length == 1
     ) {
       await addPositionProfitData(interaction.user.id, profit);
       addedToLeaderboard = true;
@@ -737,20 +738,26 @@ async function sendProfit(interaction: ChatInputCommandInteraction) {
       embeds: [
         {
           title: `Position Profit`,
-          description: `**Position Address**: [${
-            profit.positionAddress
-          }](https://solscan.io/account/${
-            profit.positionAddress
-          })\n\n**Deposits**: ${depositsUsd}\n\n**Withdrawals**: ${withdrawalsUsd}\n**Claimed Fees**: ${claimedFeesUsd}\n${
+          description: `**Position Address${
+            profit.positionAddresses.length > 1 ? "es" : ""
+          }**: ${profit.positionAddresses
+            .map(
+              (address) => `[${address}](https://solscan.io/account/${address})`
+            )
+            .join(
+              ", "
+            )}\n\n**Deposits**: ${depositsUsd}\n\n**Withdrawals**: ${withdrawalsUsd}\n**Claimed Fees**: ${claimedFeesUsd}\n${
             currentValueUsd
               ? `**Current Position Value**: ${currentValueUsd}\n**Unclaimed Fees**: ${unclaimedFeesUsd}\n`
               : ""
           }\n**Profit: ${profitUsd}\nProfit Percent: ${profitPercent}**\n\n${
             addedToLeaderboard
               ? "Your transaction was added to the leaderboard!  Use the `/leaderboard` command to see if your position ranks at the top."
+              : profit.positionAddresses.length > 1
+              ? "Transaction was from multi-position claim, which isn't yet supported for the leaderboard"
               : interaction.options.get("excludefromleaderboard")?.value == true
               ? "Your position was not added to the leaderboard"
-              : "Position is still open and cannot be added to the leaderboard"
+              : "Your position is still open and cannot be added to the leaderboard yet"
           }`,
           color: 3329330,
         },
