@@ -184,6 +184,7 @@ export async function loadPairs() {
       $xy: "y",
     });
   });
+  console.log("Pairs loaded");
 }
 
 async function addPair(data: MeteoraTotalProfitData) {
