@@ -56,6 +56,10 @@ export interface MeteoraTotalProfitData {
   unclaimedFeesUsd: number;
   profitUsd: number;
   profitPercent: number;
+  transactions: {
+    deposits: MeteoraTransactionData[];
+    withdrawals: MeteoraTransactionData[];
+  };
 }
 
 interface MeteoraUnrealizedProfitData {
@@ -72,6 +76,16 @@ interface MeteoraRealizedProfitData {
   feesUsd: number;
   depositsUsd: number;
   withdrawalsUsd: number;
+  transactions: {
+    deposits: MeteoraTransactionData[];
+    withdrawals: MeteoraTransactionData[];
+  };
+}
+
+interface MeteoraBalanceData {
+  priorBalance: number;
+  timeOpen: number;
+  newBalance: number;
 }
 
 function combineRealizedProfits(
@@ -96,11 +110,18 @@ function combineRealizedProfits(
     unclaimedFeesUsd: 0,
     profitUsd: 0,
     profitPercent: 0,
+    transactions: { deposits: [], withdrawals: [] },
   };
   realizedProfitData.forEach((data) => {
     totalProfitData.depositsUsd += data.depositsUsd;
     totalProfitData.withdrawalsUsd += data.withdrawalsUsd;
     totalProfitData.claimedFeesUsd += data.feesUsd;
+    totalProfitData.transactions.deposits =
+      totalProfitData.transactions.deposits.concat(data.transactions.deposits);
+    totalProfitData.transactions.withdrawals =
+      totalProfitData.transactions.withdrawals.concat(
+        data.transactions.withdrawals
+      );
   });
   totalProfitData.profitUsd =
     totalProfitData.withdrawalsUsd +
@@ -311,29 +332,110 @@ async function getPositionRealizedProfit(
       ),
     ]);
 
-  const [positionData, depositsData, withdrawalsData] = await Promise.all([
+  const [positionData, deposits, withdrawals] = await Promise.all([
     positionResponse.json() as unknown as MeteoraPositionData,
     depositsResponse.json() as unknown as MeteoraTransactionData[],
     withdrawalsResponse.json() as unknown as MeteoraTransactionData[],
   ]);
 
   const feesUsd = positionData.total_fee_usd_claimed;
-  const depositsUsd = depositsData
+  const depositsUsd = deposits
     .map((deposit) => deposit.token_x_usd_amount + deposit.token_y_usd_amount)
     .reduce((total, current) => total + current);
   const withdrawalsUsd =
-    withdrawalsData.length > 0
-      ? withdrawalsData
+    withdrawals.length > 0
+      ? withdrawals
           .map(
             (withdrawal) =>
               withdrawal.token_x_usd_amount + withdrawal.token_y_usd_amount
           )
           .reduce((total, current) => total + current)
       : 0;
+  const transactions = {
+    deposits,
+    withdrawals,
+  };
   return {
     positionAddresses,
     feesUsd,
     depositsUsd,
     withdrawalsUsd,
+    transactions,
   };
+}
+
+function getBalanceData(
+  profitData: MeteoraTotalProfitData
+): MeteoraBalanceData[] {
+  const transactions = profitData.transactions;
+  const positionIsOpen = profitData.positionIsOpen;
+  const combinedTransactions: MeteoraTransactionData[] =
+    // Combine withdrawals
+    transactions.deposits
+      .concat(
+        // Make the amounts for withdrawals negative
+        transactions.withdrawals.map((withdrawal) => {
+          const withdrawalCopy: MeteoraTransactionData = JSON.parse(
+            JSON.stringify(withdrawal)
+          );
+          withdrawalCopy.token_x_amount = -withdrawalCopy.token_x_amount;
+          withdrawalCopy.token_y_amount = -withdrawalCopy.token_y_amount;
+          withdrawalCopy.token_x_usd_amount =
+            -withdrawalCopy.token_x_usd_amount;
+          withdrawalCopy.token_y_amount = -withdrawalCopy.token_y_amount;
+          return withdrawalCopy;
+        })
+      )
+      // Sort by timestamp
+      .sort((a, b) => a.onchain_timestamp - b.onchain_timestamp);
+
+  const balanceData: MeteoraBalanceData[] = [];
+  if (combinedTransactions.length == 1) {
+    return [
+      {
+        priorBalance: 0,
+        timeOpen:
+          new Date().getTime() -
+          combinedTransactions[0].onchain_timestamp * 1000,
+        newBalance:
+          combinedTransactions[0].token_x_usd_amount +
+          combinedTransactions[0].token_y_usd_amount,
+      },
+    ];
+  }
+  for (let i = 0; i < combinedTransactions.length; i++) {
+    const priorBalance = i == 0 ? 0 : balanceData[i - 1].newBalance;
+    const current = combinedTransactions[i];
+    const next = combinedTransactions[i + 1];
+    balanceData.push({
+      priorBalance: i == 0 ? 0 : balanceData[i - 1].newBalance,
+      timeOpen:
+        i != combinedTransactions.length - 1
+          ? (next.onchain_timestamp - current.onchain_timestamp) * 1000
+          : positionIsOpen
+          ? new Date().getTime() - current.onchain_timestamp * 1000
+          : 0,
+      newBalance:
+        i != combinedTransactions.length - 1 || positionIsOpen
+          ? priorBalance +
+            current.token_x_usd_amount +
+            current.token_y_usd_amount
+          : 0,
+    });
+  }
+  return balanceData;
+}
+
+export function meanBalance(profitData: MeteoraTotalProfitData): number {
+  const balanceData = getBalanceData(profitData);
+  if (balanceData.length == 0) {
+    return 0;
+  }
+  let combinedBalance = balanceData
+    .map((data) => data.newBalance * data.timeOpen)
+    .reduce((total, current) => total + current);
+  let totalTime = balanceData
+    .map((data) => data.timeOpen)
+    .reduce((total, current) => total + current);
+  return combinedBalance / totalTime;
 }

@@ -26,10 +26,10 @@ CREATE TABLE IF NOT EXISTS users (
   CONSTRAINT users_pk PRIMARY KEY (id)
 );
 CREATE TABLE IF NOT EXISTS wallets (
-	id TEXT NOT NULL,
+	id TEXT(44) NOT NULL,
 	user_id TEXT NOT NULL,
 	CONSTRAINT wallets_pk PRIMARY KEY (id),
-	CONSTRAINT wallets_users_FK FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE RESTRICT
+	CONSTRAINT wallets_users_FK FOREIGN KEY (user_id) REFERENCES users(id) ON UPDATE RESTRICT
 );
 CREATE TABLE IF NOT EXISTS pairs (
 	id TEXT(44) NOT NULL,
@@ -59,6 +59,14 @@ CREATE TABLE IF NOT EXISTS positions (
 	CONSTRAINT positions_pk PRIMARY KEY (id),
 	CONSTRAINT positions_pairs_FK FOREIGN KEY (pair_id) REFERENCES pairs(id) ON UPDATE RESTRICT,
 	CONSTRAINT positions_wallets_FK FOREIGN KEY (wallet_id) REFERENCES wallets(id) ON DELETE CASCADE ON UPDATE RESTRICT
+);
+CREATE TABLE IF NOT EXISTS transactions (
+	timestamp INTEGER NOT NULL,
+	id TEXT(44) NOT NULL,
+	position TEXT(44) NOT NULL,
+	usd_balance_change NUMERIC NOT NULL,
+	CONSTRAINT transactions_pk PRIMARY KEY (id),
+	CONSTRAINT transactions_positions_FK FOREIGN KEY ("position") REFERENCES positions(id) ON UPDATE RESTRICT
 );
 `);
 
@@ -102,6 +110,20 @@ const loadPositionQuery = DB.query(`
 	WHERE
 		id = $id
 `);
+const loadTransactionsQuery = DB.query(`
+  INSERT INTO transactions (
+    timestamp,
+    id,
+    position,
+    usd_balance_change
+  ) VALUES(
+    $timestamp,
+    $id,
+    $position,
+    $usd_balance_change
+  )
+  ON CONFLICT DO NOTHING;
+`);
 const loadProfitTransaction = DB.transaction(
   (userId: string, data: MeteoraTotalProfitData) => {
     loadUserQuery.run({
@@ -119,7 +141,29 @@ const loadProfitTransaction = DB.transaction(
       $withdrawals: data.withdrawalsUsd,
       $claimed_fees: data.claimedFeesUsd,
     });
-    return 3;
+    data.transactions.deposits.forEach((deposit) => {
+      loadTransactionsQuery.run({
+        $timestamp: deposit.onchain_timestamp,
+        $id: deposit.tx_id,
+        $position: deposit.pair_address,
+        $usd_balance_change:
+          deposit.token_x_usd_amount + deposit.token_y_usd_amount,
+      });
+    });
+    data.transactions.withdrawals.forEach((withdrwal) => {
+      loadTransactionsQuery.run({
+        $timestamp: withdrwal.onchain_timestamp,
+        $id: withdrwal.tx_id,
+        $position: withdrwal.pair_address,
+        $usd_balance_change:
+          -withdrwal.token_x_usd_amount - withdrwal.token_y_usd_amount,
+      });
+    });
+    return (
+      3 +
+      data.transactions.deposits.length +
+      data.transactions.withdrawals.length
+    );
   }
 );
 export const leaderboardQuery = DB.query(`
