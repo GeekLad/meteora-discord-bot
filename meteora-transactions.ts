@@ -369,25 +369,23 @@ function getBalanceData(
 ): MeteoraBalanceData[] {
   const transactions = profitData.transactions;
   const positionIsOpen = profitData.positionIsOpen;
-  const combinedTransactions: MeteoraTransactionData[] =
-    // Combine withdrawals
-    transactions.deposits
-      .concat(
-        // Make the amounts for withdrawals negative
-        transactions.withdrawals.map((withdrawal) => {
-          const withdrawalCopy: MeteoraTransactionData = JSON.parse(
-            JSON.stringify(withdrawal)
-          );
-          withdrawalCopy.token_x_amount = -withdrawalCopy.token_x_amount;
-          withdrawalCopy.token_y_amount = -withdrawalCopy.token_y_amount;
-          withdrawalCopy.token_x_usd_amount =
-            -withdrawalCopy.token_x_usd_amount;
-          withdrawalCopy.token_y_amount = -withdrawalCopy.token_y_amount;
-          return withdrawalCopy;
-        })
-      )
-      // Sort by timestamp
-      .sort((a, b) => a.onchain_timestamp - b.onchain_timestamp);
+  const combinedTransactions: MeteoraTransactionData[] = transactions.deposits
+    // Combine withdrawals with deposits
+    .concat(
+      // Make the amounts for withdrawals negative
+      transactions.withdrawals.map((withdrawal) => {
+        const withdrawalCopy: MeteoraTransactionData = JSON.parse(
+          JSON.stringify(withdrawal)
+        );
+        withdrawalCopy.token_x_amount = -withdrawalCopy.token_x_amount;
+        withdrawalCopy.token_y_amount = -withdrawalCopy.token_y_amount;
+        withdrawalCopy.token_x_usd_amount = -withdrawalCopy.token_x_usd_amount;
+        withdrawalCopy.token_y_amount = -withdrawalCopy.token_y_amount;
+        return withdrawalCopy;
+      })
+    )
+    // Sort by timestamp
+    .sort((a, b) => a.onchain_timestamp - b.onchain_timestamp);
 
   const balanceData: MeteoraBalanceData[] = [];
   if (combinedTransactions.length == 1) {
@@ -405,22 +403,31 @@ function getBalanceData(
   }
   for (let i = 0; i < combinedTransactions.length; i++) {
     const priorBalance = i == 0 ? 0 : balanceData[i - 1].newBalance;
-    const current = combinedTransactions[i];
-    const next = combinedTransactions[i + 1];
+    const currentTransaction = combinedTransactions[i];
+    const nextTransaction = combinedTransactions[i + 1];
     balanceData.push({
-      priorBalance: i == 0 ? 0 : balanceData[i - 1].newBalance,
+      priorBalance,
       timeOpen:
         i != combinedTransactions.length - 1
-          ? (next.onchain_timestamp - current.onchain_timestamp) * 1000
+          ? // If it's not the last transaction, calculate the ms between the
+            // next transaction and the current one
+            (nextTransaction.onchain_timestamp -
+              currentTransaction.onchain_timestamp) *
+            1000
           : positionIsOpen
-          ? new Date().getTime() - current.onchain_timestamp * 1000
-          : 0,
+          ? // If the position is open, then calculate the ms between the current
+            // time and the current transaction
+            new Date().getTime() - currentTransaction.onchain_timestamp * 1000
+          : // If the position is closed, then the time open is 0
+            0,
       newBalance:
         i != combinedTransactions.length - 1 || positionIsOpen
           ? priorBalance +
-            current.token_x_usd_amount +
-            current.token_y_usd_amount
-          : 0,
+            currentTransaction.token_x_usd_amount +
+            currentTransaction.token_y_usd_amount
+          : // If we landed here, it's because we're at the last position and
+            // it's closed, so set the balance to 0
+            0,
     });
   }
   return balanceData;
