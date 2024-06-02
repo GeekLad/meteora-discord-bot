@@ -145,7 +145,7 @@ const loadProfitTransaction = DB.transaction(
       loadTransactionsQuery.run({
         $timestamp: deposit.onchain_timestamp,
         $id: deposit.tx_id,
-        $position: deposit.pair_address,
+        $position: deposit.position_address,
         $usd_balance_change:
           deposit.token_x_usd_amount + deposit.token_y_usd_amount,
       });
@@ -154,7 +154,7 @@ const loadProfitTransaction = DB.transaction(
       loadTransactionsQuery.run({
         $timestamp: withdrwal.onchain_timestamp,
         $id: withdrwal.tx_id,
-        $position: withdrwal.pair_address,
+        $position: withdrwal.position_address,
         $usd_balance_change:
           -withdrwal.token_x_usd_amount - withdrwal.token_y_usd_amount,
       });
