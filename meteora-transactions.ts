@@ -8,7 +8,7 @@ import { getJupiterTokenList, lamportsToDecimal } from "./jupiter-token-list";
 import DLMM from "@meteora-ag/dlmm";
 import { getPrices } from "./jupiter-price";
 
-interface MeteoraPositionAddresses {
+export interface MeteoraPositionAddresses {
   ownerAddress: PublicKey;
   poolAddress: PublicKey;
   positionAddress: PublicKey;
@@ -71,7 +71,7 @@ interface MeteoraUnrealizedProfitData {
   unclaimedFeesUsd: number;
 }
 
-interface MeteoraRealizedProfitData {
+export interface MeteoraRealizedProfitData {
   positionAddresses: MeteoraPositionAddresses;
   feesUsd: number;
   depositsUsd: number;
@@ -307,7 +307,7 @@ async function getPositionAddresses(
   });
 }
 
-async function getPositionRealizedProfit(
+export async function getPositionRealizedProfit(
   positionAddresses: MeteoraPositionAddresses
 ): Promise<MeteoraRealizedProfitData> {
   const position = positionAddresses.positionAddress;

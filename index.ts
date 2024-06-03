@@ -796,12 +796,12 @@ async function sendLeaderboard(interaction: ChatInputCommandInteraction) {
         currency: "USD",
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-      })} Profit: ${leader.profit.toLocaleString("en-US", {
+      })} Profit: ${leader.net_profit.toLocaleString("en-US", {
         style: "currency",
         currency: "USD",
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-      })} Profit %: ${leader.profitPercent.toLocaleString("en-US", {
+      })} Profit %: ${leader.profit_percent.toLocaleString("en-US", {
         style: "percent",
         maximumFractionDigits: 2,
       })}`

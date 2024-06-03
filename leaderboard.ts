@@ -1,21 +1,35 @@
 import { Database } from "bun:sqlite";
 import { getJupiterTokenList } from "./jupiter-token-list";
 import { getMeteoraPairs } from "./meteora-markets";
-import { type MeteoraTotalProfitData } from "./meteora-transactions";
+import {
+  getPositionRealizedProfit,
+  type MeteoraPositionAddresses,
+  type MeteoraRealizedProfitData,
+  type MeteoraTotalProfitData,
+} from "./meteora-transactions";
+import { PublicKey } from "@solana/web3.js";
 
 export interface LeaderboardData {
   user_id: string;
+  position_id: string;
   pair_name: string;
   pair_address: string;
   x_symbol: string;
   x_address: string;
   y_symbol: string;
   y_address: string;
+  position_minutes_open: number;
+  position_hours_open: number;
+  position_days_open: number;
   deposits: number;
+  deposit_count: number;
   withdrawals: number;
+  withdrawal_count: number;
   claimed_fees: number;
-  profit: number;
-  profitPercent: number;
+  mean_balance: number;
+  position_profit: number;
+  net_profit: number;
+  profit_percent: number;
 }
 
 const DB = new Database("leaderboard.sqlite", { create: true });
@@ -61,12 +75,12 @@ CREATE TABLE IF NOT EXISTS positions (
 	CONSTRAINT positions_wallets_FK FOREIGN KEY (wallet_id) REFERENCES wallets(id) ON DELETE CASCADE ON UPDATE RESTRICT
 );
 CREATE TABLE IF NOT EXISTS transactions (
-	timestamp INTEGER NOT NULL,
+	onchain_timestamp INTEGER NOT NULL,
 	id TEXT(44) NOT NULL,
-	position TEXT(44) NOT NULL,
+	position_id TEXT(44) NOT NULL,
 	usd_balance_change NUMERIC NOT NULL,
 	CONSTRAINT transactions_pk PRIMARY KEY (id),
-	CONSTRAINT transactions_positions_FK FOREIGN KEY ("position") REFERENCES positions(id) ON UPDATE RESTRICT
+	CONSTRAINT transactions_positions_FK FOREIGN KEY ("position_id") REFERENCES positions(id) ON UPDATE RESTRICT
 );
 `);
 
@@ -112,18 +126,54 @@ const loadPositionQuery = DB.query(`
 `);
 const loadTransactionsQuery = DB.query(`
   INSERT INTO transactions (
-    timestamp,
+    onchain_timestamp,
     id,
-    position,
+    position_id,
     usd_balance_change
   ) VALUES(
-    $timestamp,
+    $onchain_timestamp,
     $id,
-    $position,
+    $position_id,
     $usd_balance_change
   )
   ON CONFLICT DO NOTHING;
 `);
+const getPositionsMissingTransactions = DB.query(`
+  SELECT
+    p.wallet_id,
+    p.pair_id,
+    p.id
+  FROM
+    positions p
+  WHERE
+    p.id not in (SELECT position_id FROM transactions)
+`);
+function loadDepositsWithdrawals(
+  data: MeteoraTotalProfitData | MeteoraRealizedProfitData
+) {
+  data.transactions.deposits.forEach((deposit) => {
+    loadTransactionsQuery.run({
+      $onchain_timestamp: deposit.onchain_timestamp,
+      $id: deposit.tx_id,
+      $position_id: deposit.position_address,
+      $usd_balance_change:
+        deposit.token_x_usd_amount + deposit.token_y_usd_amount,
+    });
+  });
+  data.transactions.withdrawals.forEach((withdrwal) => {
+    loadTransactionsQuery.run({
+      $onchain_timestamp: withdrwal.onchain_timestamp,
+      $id: withdrwal.tx_id,
+      $position_id: withdrwal.position_address,
+      $usd_balance_change:
+        -withdrwal.token_x_usd_amount - withdrwal.token_y_usd_amount,
+    });
+  });
+  return (
+    data.transactions.deposits.length + data.transactions.withdrawals.length
+  );
+}
+
 const loadProfitTransaction = DB.transaction(
   (userId: string, data: MeteoraTotalProfitData) => {
     loadUserQuery.run({
@@ -141,56 +191,92 @@ const loadProfitTransaction = DB.transaction(
       $withdrawals: data.withdrawalsUsd,
       $claimed_fees: data.claimedFeesUsd,
     });
-    data.transactions.deposits.forEach((deposit) => {
-      loadTransactionsQuery.run({
-        $timestamp: deposit.onchain_timestamp,
-        $id: deposit.tx_id,
-        $position: deposit.position_address,
-        $usd_balance_change:
-          deposit.token_x_usd_amount + deposit.token_y_usd_amount,
-      });
-    });
-    data.transactions.withdrawals.forEach((withdrwal) => {
-      loadTransactionsQuery.run({
-        $timestamp: withdrwal.onchain_timestamp,
-        $id: withdrwal.tx_id,
-        $position: withdrwal.position_address,
-        $usd_balance_change:
-          -withdrwal.token_x_usd_amount - withdrwal.token_y_usd_amount,
-      });
-    });
-    return (
-      3 +
-      data.transactions.deposits.length +
-      data.transactions.withdrawals.length
-    );
+    return 3 + loadDepositsWithdrawals(data);
   }
 );
 export const leaderboardQuery = DB.query(`
-	SELECT
-		u.id user_id,
-		p.name pair_name,
-		p.id pair_address,
-		x.symbol x_symbol,
-		x.id x_address,
-		y.symbol y_symbol,
-		y.id y_address,
-		ps.deposits,
-		ps.withdrawals,
-		ps.claimed_fees,
-		ps.withdrawals + ps.claimed_fees - ps.deposits profit,
-		(ps.withdrawals + ps.claimed_fees - ps.deposits) / ps.deposits profitPercent
-	FROM
-		users u
-		join wallets w on w.user_id = u.id
-		join positions ps on ps.wallet_id = w.id 
-		join pairs p on ps.pair_id = p.id
-		join tokens_pairs tpx on tpx.pair_id = p.id and tpx.xy = 'x'
-		join tokens_pairs tpy on tpy.pair_id = p.id and tpy.xy = 'y'
-		join tokens x on x.id = tpx.token_id
-		join tokens y on y.id = tpy.token_id
-	ORDER BY 
-		(ps.withdrawals + ps.claimed_fees - ps.deposits) / ps.deposits DESC
+  WITH balances as (
+    SELECT
+      position_id,
+      onchain_timestamp,
+      CASE WHEN usd_balance_change > 0 THEN 1 ELSE 0 END deposit_count,
+      CASE WHEN usd_balance_change < 0 THEN 1 ELSE 0 END withdrawal_count,
+      COALESCE (LEAD(onchain_timestamp) OVER (PARTITION BY position_id ORDER BY onchain_timestamp) - onchain_timestamp, 0) time_elapsed,
+      COALESCE (SUM(usd_balance_change) OVER (PARTITION BY position_id ORDER BY onchain_timestamp), usd_balance_change) balance
+    FROM
+      transactions
+  ),
+  time_weighted_balances as (
+    SELECT
+      position_id,
+      MIN(onchain_timestamp) onchain_timestamp_position_open,
+      MAX(onchain_timestamp) onchain_timestamp_position_close,
+      SUM(deposit_count) deposit_count,
+      SUM(withdrawal_count) withdrawal_count,
+      CASE 
+        WHEN MOD(SUM(time_elapsed), 60) > 30 THEN 1
+        ELSE 0
+      END + MOD(SUM(time_elapsed)/ 60, 60) position_minutes_open,
+      MOD(SUM(time_elapsed) / (60*60), 24) position_hours_open,
+      SUM(time_elapsed) / (60*60*24) position_days_open,
+      SUM(time_elapsed*balance) / SUM(time_elapsed) mean_balance,
+      -SUM(case when time_elapsed = 0 then balance else 0 end) position_profit
+    FROM
+      balances
+    GROUP BY
+      position_id
+  ),
+  leaderboard as (
+    SELECT
+      u.id user_id,
+      ps.id position_id,
+      p.name pair_name,
+      p.id pair_address,
+      x.symbol x_symbol,
+      x.id x_address,
+      y.symbol y_symbol,
+      y.id y_address,
+      ps.deposits,
+      ps.withdrawals,
+      ps.claimed_fees,
+      ps.withdrawals + ps.claimed_fees - ps.deposits net_profit,
+      (ps.withdrawals + ps.claimed_fees - ps.deposits) / ps.deposits profit_percent
+    FROM
+      users u
+      join wallets w on w.user_id = u.id
+      join positions ps on ps.wallet_id = w.id 
+      join pairs p on ps.pair_id = p.id
+      join tokens_pairs tpx on tpx.pair_id = p.id and tpx.xy = 'x'
+      join tokens_pairs tpy on tpy.pair_id = p.id and tpy.xy = 'y'
+      join tokens x on x.id = tpx.token_id
+      join tokens y on y.id = tpy.token_id
+  )
+  SELECT 
+    l.user_id,
+    l.position_id,
+    l.pair_name,
+    l.pair_address,
+    l.x_symbol,
+    l.x_address,
+    l.y_symbol,
+    l.y_address,
+    b.position_minutes_open,
+    b.position_hours_open,
+    b.position_days_open,
+    l.deposits,
+    b.deposit_count,
+    l.withdrawals,
+    b.withdrawal_count,
+    l.claimed_fees,
+    b.mean_balance,
+    b.position_profit,
+    l.net_profit,
+    l.profit_percent
+  FROM 
+    time_weighted_balances b
+    JOIN leaderboard l ON l.position_id = b.position_id
+  ORDER BY
+    l.profit_percent DESC
 `);
 
 const getTokenQuery = DB.query(`
@@ -271,4 +357,29 @@ export async function addPositionProfitData(
     await addPair(data);
   }
   loadProfitTransaction(userId, data);
+}
+
+export async function addMissingTransactions() {
+  const positionIds = getPositionsMissingTransactions.all() as [
+    {
+      wallet_id: string;
+      pair_id: string;
+      id: string;
+    }
+  ];
+  const missingTransactionProfitData = await Promise.all(
+    positionIds.map(async (data) => {
+      const position: MeteoraPositionAddresses = {
+        ownerAddress: new PublicKey(data.wallet_id),
+        poolAddress: new PublicKey(data.pair_id),
+        positionAddress: new PublicKey(data.id),
+      };
+      return getPositionRealizedProfit(position);
+    })
+  );
+  let numTransactions = 0;
+  missingTransactionProfitData.forEach((profitData) => {
+    numTransactions += loadDepositsWithdrawals(profitData);
+  });
+  return numTransactions;
 }

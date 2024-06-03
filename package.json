@@ -16,5 +16,11 @@
     "@solana/web3.js": "^1.91.8",
     "discord.js": "^14.15.2",
     "pm2": "^5.3.1"
+  },
+  "scripts": {
+    "pm2:start": "pm2 start --interpreter ~/.bun/bin/bun index.ts --name meteora-discord-bot --exp-backoff-restart-delay 30000",
+    "pm2:stop": "pm2 del meteora-discord-bot",
+    "add-missing-tx": "bun run add-missing-transactions.ts",
+    "build-gs": "./build-gs.sh"
   }
 }
