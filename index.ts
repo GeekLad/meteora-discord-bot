@@ -725,7 +725,7 @@ async function createProfitEmbed(
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  const profitUsd = position.total_profit.toLocaleString("en-US", {
+  const totalProfitUsd = position.total_profit.toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
@@ -762,7 +762,7 @@ async function createProfitEmbed(
       currentValueUsd
         ? `**Current Position Value**: ${currentValueUsd}\n**Unclaimed Fees**: ${unclaimedFeesUsd}\n`
         : ""
-    }\n**Profit: ${profitUsd}\nProfit Percent based on deposits & withdraws: ${depositWithdrawProfitStr}\nProfit Percent based on average balance: ${averageProfitPercentStr}**\n\n${
+    }\n**Total Profit: ${totalProfitUsd}\nProfit Percent based on deposits & withdraws: ${depositWithdrawProfitStr}\nProfit Percent based on average balance: ${averageProfitPercentStr}**\n\n${
       addedToLeaderboard
         ? "Your transaction was added to the leaderboard!  Use the `/leaderboard` command to see if your position ranks at the top."
         : interaction.options.get("excludefromleaderboard")?.value == true
@@ -791,7 +791,11 @@ async function sendProfit(interaction: ChatInputCommandInteraction) {
       positions.map((position) => createProfitEmbed(interaction, position))
     );
     interaction.editReply({
-      embeds,
+      content:
+        embeds.length > 6
+          ? "Only the first 6 transactions found were sent.  Please submit fewer transactions at once."
+          : "",
+      embeds: embeds.slice(0, 6),
     });
   } catch (err) {
     invalidTransaction(interaction, txid);
