@@ -126,12 +126,12 @@ interface MeteoraBalance {
 
 // Set up throttles for RPC & Meteora API
 const THROTTLE_RPC = pThrottle({
-  limit: 4,
+  limit: Number(process.env.RPC_MAX_TPS ?? 10),
   interval: 1000,
   onDelay: () => console.log("Throttling RPC requests..."),
 });
 const THROTTLE_METEORA_API = pThrottle({
-  limit: 10,
+  limit: Number(process.env.METEORA_API_MAX_TPS ?? 10),
   interval: 100,
   // onDelay: () => console.log("Throttling Meteora API requests..."),
 });

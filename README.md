@@ -117,7 +117,9 @@ their investment preferences.
   - `ENABLE_DUNE_REFRESH`: Flag to enable the re-running of the Dune query.
     This will cost API credits.
   - `DEBUG`: Flag to disable Dune, to avoid spending credits while testing out
-    other stuff.
+    other stuff
+  - `RPC_MAX_TPS`: Maximium RPC requests per second (defaults to 10)
+  - `METEORA_API_MAX_TPS`: Maximum Meteora requests per second (defaults to 10)
 - Run the bot with the pm2 launch script: `./pm2-start.sh`
 - Stop the bot with the pm2 stop script: `./pm2-stop.sh`
 - You can use pm2 commands with `npx pm2` (`npx pm2 status`, `npx pm2 log`, etc.)
