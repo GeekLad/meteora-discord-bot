@@ -31,7 +31,10 @@ import { Connection } from "@solana/web3.js";
 import { type Idl } from "@project-serum/anchor";
 import { IDL } from "@meteora-ag/dlmm";
 import { SolanaParser } from "@debridge-finance/solana-transaction-parser";
-import { getTotalProfitDataFromSignature } from "./meteora-transactions";
+import {
+  getPositionValuesFromPositionAddressesOrTransactionSignatures,
+  type MeteoraPositionWithTransactionMintsAndCurrentValue,
+} from "./meteora-transactions";
 import {
   addPositionProfitData,
   leaderboardQuery,
@@ -669,99 +672,126 @@ function invalidTransaction(
   });
 }
 
+async function createProfitEmbed(
+  interaction: ChatInputCommandInteraction,
+  position: MeteoraPositionWithTransactionMintsAndCurrentValue
+): Promise<APIEmbed> {
+  let addedToLeaderboard = false;
+  if (
+    !position.lbPosition &&
+    !interaction.options.get("excludefromleaderboard")?.value
+  ) {
+    await addPositionProfitData(interaction.user.id, position);
+    addedToLeaderboard = true;
+  }
+  const positionUrl = `[${position.pair_name}](https://app.meteora.ag/dlmm/${position.position.pair_address})`;
+  const depositsUsd = position.deposits_usd.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const averageBalanceUsd = position.average_balance.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const currentValueUsd = position.current_usd
+    ? position.current_usd.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    : false;
+  const unclaimedFeesUsd = position.unclaimed_fees_usd
+    ? position.unclaimed_fees_usd.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    : false;
+  const claimedFeesUsd = position.claimed_fees_usd.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const withdrawalsUsd = position.withdraws_usd.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const profitUsd = position.total_profit.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const depositWithdrawProfitPercent =
+    position.total_profit / position.deposits_usd;
+  const depositWithdrawProfitStr = depositWithdrawProfitPercent.toLocaleString(
+    "en-US",
+    {
+      style: "percent",
+      maximumFractionDigits: 2,
+    }
+  );
+  const averageProfitPercent =
+    position.average_balance < 0
+      ? Infinity
+      : position.total_profit / position.average_balance;
+  const averageProfitPercentStr = averageProfitPercent.toLocaleString("en-US", {
+    style: "percent",
+    maximumFractionDigits: 2,
+  });
+  return {
+    title: `Position Profit`,
+    description: `**Pair**: ${positionUrl}\n**Position Address**: [${
+      position.position.address
+    }](https://solscan.io/account/${
+      position.position.address
+    })\n\n**Deposits**: ${depositsUsd}\n**Average Balance**: ${averageBalanceUsd}${
+      position.average_balance < 0
+        ? "\nNote: Your average balance is negative, which means you ended up with more USD than you put in.  Nice job!"
+        : ""
+    }\n\n**Withdrawals**: ${withdrawalsUsd}\n**Claimed Fees**: ${claimedFeesUsd}\n${
+      currentValueUsd
+        ? `**Current Position Value**: ${currentValueUsd}\n**Unclaimed Fees**: ${unclaimedFeesUsd}\n`
+        : ""
+    }\n**Profit: ${profitUsd}\nProfit Percent based on deposits & withdraws: ${depositWithdrawProfitStr}\nProfit Percent based on average balance: ${averageProfitPercentStr}**\n\n${
+      addedToLeaderboard
+        ? "Your transaction was added to the leaderboard!  Use the `/leaderboard` command to see if your position ranks at the top."
+        : interaction.options.get("excludefromleaderboard")?.value == true
+        ? "Your position was not added to the leaderboard"
+        : "Your position is still open and cannot be added to the leaderboard yet"
+    }`,
+    color: 3329330,
+  };
+}
+
 async function sendProfit(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ ephemeral: true });
   const txid = interaction.options.get("txid")!.value as string;
   try {
-    const profit = await getTotalProfitDataFromSignature(
-      CONNECTION,
-      PARSER,
-      txid
-    );
-    if (!profit) {
+    const positions =
+      await getPositionValuesFromPositionAddressesOrTransactionSignatures(
+        CONNECTION,
+        PARSER,
+        txid
+      );
+
+    if (!positions) {
       return invalidTransaction(interaction, txid);
     }
-    let addedToLeaderboard = false;
-    if (
-      !profit.positionIsOpen &&
-      !interaction.options.get("excludefromleaderboard")?.value &&
-      profit.positionAddresses.length == 1
-    ) {
-      await addPositionProfitData(interaction.user.id, profit);
-      addedToLeaderboard = true;
-    }
-    const depositsUsd = profit.depositsUsd.toLocaleString("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    const currentValueUsd = profit.currentValueUsd
-      ? profit.currentValueUsd.toLocaleString("en-US", {
-          style: "currency",
-          currency: "USD",
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })
-      : false;
-    const unclaimedFeesUsd = profit.currentValueUsd
-      ? profit.unclaimedFeesUsd.toLocaleString("en-US", {
-          style: "currency",
-          currency: "USD",
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })
-      : false;
-    const claimedFeesUsd = profit.claimedFeesUsd.toLocaleString("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    const withdrawalsUsd = profit.withdrawalsUsd.toLocaleString("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    const profitUsd = profit.profitUsd.toLocaleString("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    const profitPercent = profit.profitPercent.toLocaleString("en-US", {
-      style: "percent",
-      maximumFractionDigits: 2,
-    });
+    const embeds = await Promise.all(
+      positions.map((position) => createProfitEmbed(interaction, position))
+    );
     interaction.editReply({
-      embeds: [
-        {
-          title: `Position Profit`,
-          description: `**Position Address${
-            profit.positionAddresses.length > 1 ? "es" : ""
-          }**: ${profit.positionAddresses
-            .map(
-              (address) => `[${address}](https://solscan.io/account/${address})`
-            )
-            .join(
-              ", "
-            )}\n\n**Deposits**: ${depositsUsd}\n\n**Withdrawals**: ${withdrawalsUsd}\n**Claimed Fees**: ${claimedFeesUsd}\n${
-            currentValueUsd
-              ? `**Current Position Value**: ${currentValueUsd}\n**Unclaimed Fees**: ${unclaimedFeesUsd}\n`
-              : ""
-          }\n**Profit: ${profitUsd}\nProfit Percent: ${profitPercent}**\n\n${
-            addedToLeaderboard
-              ? "Your transaction was added to the leaderboard!  Use the `/leaderboard` command to see if your position ranks at the top."
-              : profit.positionAddresses.length > 1
-              ? "Transaction was from multi-position claim, which isn't yet supported for the leaderboard"
-              : interaction.options.get("excludefromleaderboard")?.value == true
-              ? "Your position was not added to the leaderboard"
-              : "Your position is still open and cannot be added to the leaderboard yet"
-          }`,
-          color: 3329330,
-        },
-      ],
+      embeds,
     });
   } catch (err) {
     invalidTransaction(interaction, txid);

@@ -1,13 +1,15 @@
 import { Database } from "bun:sqlite";
-import { getJupiterTokenList } from "./jupiter-token-list";
+import {
+  getJupiterTokenList,
+  type JupiterTokenListToken,
+} from "./jupiter-token-list";
 import { getMeteoraPairs } from "./meteora-markets";
 import {
-  getPositionRealizedProfit,
-  type MeteoraPositionAddresses,
-  type MeteoraRealizedProfitData,
-  type MeteoraTotalProfitData,
+  getPositionValuesFromPositionAddressesOrTransactionSignatures,
+  type MeteoraPositionWithTransactionMintsAndCurrentValue,
 } from "./meteora-transactions";
-import { PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
+import type { SolanaParser } from "@debridge-finance/solana-transaction-parser";
 
 export interface LeaderboardData {
   user_id: string;
@@ -140,8 +142,6 @@ const loadTransactionsQuery = DB.query(`
 `);
 const getPositionsMissingTransactions = DB.query(`
   SELECT
-    p.wallet_id,
-    p.pair_id,
     p.id
   FROM
     positions p
@@ -149,9 +149,9 @@ const getPositionsMissingTransactions = DB.query(`
     p.id not in (SELECT position_id FROM transactions)
 `);
 function loadDepositsWithdrawals(
-  data: MeteoraTotalProfitData | MeteoraRealizedProfitData
+  data: MeteoraPositionWithTransactionMintsAndCurrentValue
 ) {
-  data.transactions.deposits.forEach((deposit) => {
+  data.deposits.forEach((deposit) => {
     loadTransactionsQuery.run({
       $onchain_timestamp: deposit.onchain_timestamp,
       $id: deposit.tx_id,
@@ -160,36 +160,37 @@ function loadDepositsWithdrawals(
         deposit.token_x_usd_amount + deposit.token_y_usd_amount,
     });
   });
-  data.transactions.withdrawals.forEach((withdrwal) => {
+  data.withdraws.forEach((withdraw) => {
     loadTransactionsQuery.run({
-      $onchain_timestamp: withdrwal.onchain_timestamp,
-      $id: withdrwal.tx_id,
-      $position_id: withdrwal.position_address,
+      $onchain_timestamp: withdraw.onchain_timestamp,
+      $id: withdraw.tx_id,
+      $position_id: withdraw.position_address,
       $usd_balance_change:
-        -withdrwal.token_x_usd_amount - withdrwal.token_y_usd_amount,
+        -withdraw.token_x_usd_amount - withdraw.token_y_usd_amount,
     });
   });
-  return (
-    data.transactions.deposits.length + data.transactions.withdrawals.length
-  );
+  return data.deposits.length + data.withdraws.length;
 }
 
 const loadProfitTransaction = DB.transaction(
-  (userId: string, data: MeteoraTotalProfitData) => {
+  (
+    userId: string,
+    data: MeteoraPositionWithTransactionMintsAndCurrentValue
+  ) => {
     loadUserQuery.run({
       $id: userId,
     });
     loadWalletQuery.run({
-      $id: data.ownerAddress,
+      $id: data.position.owner,
       $user_id: userId,
     });
     loadPositionQuery.run({
-      $id: data.positionAddresses[0],
-      $pair_id: data.pairAddress,
-      $wallet_id: data.ownerAddress,
-      $deposits: data.depositsUsd,
-      $withdrawals: data.withdrawalsUsd,
-      $claimed_fees: data.claimedFeesUsd,
+      $id: data.position.address,
+      $pair_id: data.position.pair_address,
+      $wallet_id: data.position.owner,
+      $deposits: data.deposits_usd,
+      $withdrawals: data.withdraws_usd,
+      $claimed_fees: data.claimed_fees_usd,
     });
     return 3 + loadDepositsWithdrawals(data);
   }
@@ -317,10 +318,12 @@ export async function loadPairs() {
   console.log("Pairs loaded");
 }
 
-async function addPair(data: MeteoraTotalProfitData) {
+async function addPair(
+  data: MeteoraPositionWithTransactionMintsAndCurrentValue
+) {
   const tokens = await getJupiterTokenList(fetch, "all");
-  const xToken = tokens.get(data.mintX);
-  const yToken = tokens.get(data.mintY);
+  const xToken = tokens.get(data.mints.mintX);
+  const yToken = tokens.get(data.mints.mintY);
   loadTokenQuery.run({
     $address: xToken!.address,
     $symbol: xToken!.symbol,
@@ -330,9 +333,9 @@ async function addPair(data: MeteoraTotalProfitData) {
     $symbol: yToken!.symbol,
   });
   const pairs = await getMeteoraPairs(fetch);
-  const pair = pairs.find((p) => p.address == data.pairAddress)!;
+  const pair = pairs.find((p) => p.address == data.position.pair_address)!;
   loadPairQuery.run({
-    $address: data.pairAddress,
+    $address: data.position.pair_address,
     $name: pair.name,
   });
   loadTokenPairQuery.run({
@@ -349,37 +352,35 @@ async function addPair(data: MeteoraTotalProfitData) {
 
 export async function addPositionProfitData(
   userId: string,
-  data: MeteoraTotalProfitData
+  data: MeteoraPositionWithTransactionMintsAndCurrentValue
 ) {
-  let xTokenRecord = getTokenQuery.get({ $address: data.mintX });
-  let yTokenRecord = getTokenQuery.get({ $address: data.mintY });
+  let xTokenRecord = getTokenQuery.get({ $address: data.mints.mintX });
+  let yTokenRecord = getTokenQuery.get({ $address: data.mints.mintY });
   if (xTokenRecord == null || yTokenRecord == null) {
     await addPair(data);
   }
   loadProfitTransaction(userId, data);
 }
 
-export async function addMissingTransactions() {
-  const positionIds = getPositionsMissingTransactions.all() as [
-    {
-      wallet_id: string;
-      pair_id: string;
-      id: string;
-    }
-  ];
-  const missingTransactionProfitData = await Promise.all(
-    positionIds.map(async (data) => {
-      const position: MeteoraPositionAddresses = {
-        ownerAddress: new PublicKey(data.wallet_id),
-        poolAddress: new PublicKey(data.pair_id),
-        positionAddress: new PublicKey(data.id),
-      };
-      return getPositionRealizedProfit(position);
-    })
-  );
+export async function addMissingTransactions(
+  connection: Connection,
+  parser: SolanaParser
+) {
+  const positionAddresses = getPositionsMissingTransactions
+    .values()
+    .flat()
+    .join(",");
+  const missingTransactionProfitData =
+    await getPositionValuesFromPositionAddressesOrTransactionSignatures(
+      connection,
+      parser,
+      positionAddresses
+    );
   let numTransactions = 0;
-  missingTransactionProfitData.forEach((profitData) => {
-    numTransactions += loadDepositsWithdrawals(profitData);
-  });
+  if (missingTransactionProfitData) {
+    missingTransactionProfitData.forEach((profitData) => {
+      numTransactions += loadDepositsWithdrawals(profitData);
+    });
+  }
   return numTransactions;
 }
