@@ -15,6 +15,7 @@
     "@project-serum/anchor": "^0.26.0",
     "@solana/web3.js": "^1.91.8",
     "discord.js": "^14.15.2",
+    "p-throttle": "^6.1.0",
     "pm2": "^5.3.1"
   },
   "scripts": {
