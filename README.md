@@ -106,8 +106,12 @@ their investment preferences.
 
 ### Running the Bot
 
+I've only run the bot on Linux (both native Linux and WSL).  If you run on Windows, I recommend running it under WSL.
+
 - [Install Bun](https://bun.sh)
+- [Create a Discord application](https://discord.com/developers/applications), to get your bot token
 - Create a `.env` with the following environment variables:
+  - `SOLANA_RPC`: URL for a Solana RPC
   - `DISCORD_BOT_TOKEN`: Your Discord bot's token
   - `DUNE_API_KEY`: Your [Dune API key](https://dune.com/settings/api)
   - `DLMM_REFRESH_MINUTES`: The number of minutes to wait between refreshes for
@@ -120,6 +124,7 @@ their investment preferences.
     other stuff
   - `RPC_MAX_TPS`: Maximium RPC requests per second (defaults to 10)
   - `METEORA_API_MAX_TPS`: Maximum Meteora requests per second (defaults to 10)
+- Install dependencies: `bun install`
 - Run the bot with the pm2 launch script: `./pm2-start.sh`
 - Stop the bot with the pm2 stop script: `./pm2-stop.sh`
 - You can use pm2 commands with `npx pm2` (`npx pm2 status`, `npx pm2 log`, etc.)
